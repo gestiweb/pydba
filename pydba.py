@@ -1,6 +1,8 @@
 #!/usr/bin/python
 #   encoding: UTF8
 
+import _mysql
+# db=_mysql.connect()
 # Importar módulo PyGreSQL para Postgres sobre Python
 import pg
 # Importar módulo para leer ficheros CFG y INI
@@ -26,8 +28,18 @@ for seccion in secciones:
   # Si la sección empieza por mod.
   if tipoSeccion=="mod":
     # Recorremos los campos de cada tabla
-    for tabla in items_seccion:
-      if tabla[1]=="Yes":
+   
+    for tabla in items_seccion:    
+      t_tabla=tabla[0].split(".")
+      if (len(t_tabla)>0):
+         tabla_n1=t_tabla[0]
+      if (len(t_tabla)>1):
+         tabla_n2=t_tabla[1]
+      #Cojemos los campos que no empiezan por "__" ni terminan con "__"
+      if (tabla_n1[0:3]=='__' and tabla_n1[-2:]=='__'):
+        continue
+        
+      if len(t_tabla)==1 and tabla[1]=="Yes":
         tablas.append(tabla[0])
         
   #Si la sección empieza por db.
@@ -45,7 +57,16 @@ for seccion in secciones:
        
 
 # Nos conectamos a la base de datos origen
-conectbd = pg.connect(
+if (configdborigen['driver']=='mysql'):
+  conectbd = _mysql.connect(
+            db=configdborigen['dbname'], 
+            port=int(configdborigen['port']),
+            host=configdborigen['host'], 
+            user=configdborigen['user'], 
+            passwd=configdborigen['passwd'])
+  conectbd.set_character_set("UTF8")            
+else:
+  conectbd = pg.connect(
             dbname=configdborigen['dbname'], 
             port=int(configdborigen['port']),
             host=configdborigen['host'], 
@@ -62,9 +83,13 @@ psql = pg.connect(
             )
             
 # Hacemos una consulta para sacar las tablas que concuerdan con la restriccion LIKE 'fl%'
+#qry_tablas = psql.query(
+#  "select table_name from information_schema.tables"   
+#  " where table_schema='public' and table_type='BASE TABLE' and table_name LIKE 'fl%%'")
+
 qry_tablas = psql.query(
   "select table_name from information_schema.tables"   
-  " where table_schema='public' and table_type='BASE TABLE' and table_name LIKE 'fl%%'")
+  " where table_schema='public' and table_type='BASE TABLE'")
   
 # Guardamos el resultado de la consulta anterior en la variable
 tupla_tablas=qry_tablas.getresult()
@@ -77,10 +102,19 @@ for tupla in tupla_tablas:
   
 for tabla in tablas:
   print tabla
+    #tablas.append(tabla[0])
   qry_deltables= psql.query("delete from %s" % tabla)
-  qry_seltables= conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
-  filas=qry_seltables.getresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
-  campos=qry_seltables.listfields() # Cargamos la lista de nombres de campos a la variable campos
+  if (configdborigen['driver']=='mysql'):
+    conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
+    r=conectbd.store_result()
+    filas=r.fetch_row(maxrows=0,how=1)
+    if (len(filas)==0):
+      continue
+    campos=filas[0].keys()
+  else:  
+    qry_seltables= conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
+    filas=qry_seltables.getresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
+    campos=qry_seltables.listfields() # Cargamos la lista de nombres de campos a la variable campos
   
   sqlvars={}
   sqlvars['tabla']=tabla
@@ -95,6 +129,9 @@ for tabla in tablas:
     n=0
     valores=[]
     for campo in fila:
+      if (configdborigen['driver']=='mysql'):
+        campo=fila[campo]
+      
       if (campo is not None):#Si el valor es nulo
         valores.append("'" + pg.escape_string(str(campo)) + "'")
       else:
