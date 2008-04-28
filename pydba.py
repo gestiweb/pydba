@@ -77,33 +77,39 @@ for tupla in tupla_tablas:
   
 for tabla in tablas:
   print tabla
-  #qry_deltables= psql.query("delete from %s" % tabla)
+  qry_deltables= psql.query("delete from %s" % tabla)
   qry_seltables= conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
-  filas=qry_seltables.getresult() #El resultado de la consulta anterior lo volcamos en una variable de lista.
-  if(tabla == 'flfiles' or tabla == 'flmodules'):
-    for fila in filas:
-      valores={}
-      n=0
-      for campo in fila:
-        if (campo is not None):#Si el valor es nulo
-          valores[str(n)]="'" + pg.escape_string(campo) + "'"
-        else:
-          valores[str(n)]="NULL"
-        n+=1
-        
-      valores["tabla"]=tabla
-      # Insertamos los datos en la tabla si se cumple el if. 
-      if tabla == 'flfiles':  
-        sql_text="insert into %(tabla)s (nombre, bloqueo , idmodulo , sha , contenido) values(%(0)s,%(1)s,%(2)s,%(3)s,%(4)s);" % valores
-      
-      # Insertamos los datos en la tabla si se cumple el if.
-      if tabla == 'flmodules':  
-        sql_text="insert into %(tabla)s (bloqueo , idmodulo , idarea , descripcion , version, icono ) values(%(0)s,%(1)s,%(2)s,%(3)s,%(4)s,%(5)s);" % valores
-      # print sql_text
-      #qry_instables=psql.query(sql_text)
-      
-  else:
-   print tabla
-    #psql.inserttable(tabla,filas)
-
-
+  filas=qry_seltables.getresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
+  campos=qry_seltables.listfields() # Cargamos la lista de nombres de campos a la variable campos
+  
+  sqlvars={}
+  sqlvars['tabla']=tabla
+  separador=", "
+  sqlvars['fields']=separador.join(campos)
+  # *** Inicio proceso de insert into en la tabla
+  # insert into table (field1,field2) VALUES (val1,val2),(val1,val2),(val1,val2)
+  f=0
+  bytes=0
+  porcentaje=0
+  for fila in filas:
+    n=0
+    valores=[]
+    for campo in fila:
+      if (campo is not None):#Si el valor es nulo
+        valores.append("'" + pg.escape_string(str(campo)) + "'")
+      else:
+        valores.append("NULL")
+      n+=1
+    text="(" + separador.join(valores) + ")"
+    bytes+=len(text)
+    f+=1
+    # En postgres no funcionan los insert multilínea
+    sqlvars['rows']=text
+    sql_text="INSERT INTO %(tabla)s (%(fields)s) VALUES %(rows)s;" % sqlvars
+    qry_instables=psql.query(sql_text)
+    bytes=0
+    if (porcentaje+5<=f*100/len(filas)):
+      porcentaje=f*100/len(filas)
+      print tabla + "(" + str(porcentaje) + "%)"
+    
+  
