@@ -1,6 +1,7 @@
 #!/usr/bin/python
 #   encoding: UTF8
 
+#Importar módulo mysql para MySQL sobre Python 
 import _mysql
 # db=_mysql.connect()
 # Importar módulo PyGreSQL para Postgres sobre Python
@@ -28,21 +29,21 @@ for seccion in secciones:
   # Si la sección empieza por mod.
   if tipoSeccion=="mod":
     # Recorremos los campos de cada tabla
-   
+    # Dividimos de cada modulo los campos en los que aparece un punto
     for tabla in items_seccion:    
       t_tabla=tabla[0].split(".")
       if (len(t_tabla)>0):
          tabla_n1=t_tabla[0]
       if (len(t_tabla)>1):
          tabla_n2=t_tabla[1]
-      #Cojemos los campos que no empiezan por "__" ni terminan con "__"
+      # Cogemos los campos que no empiezan por "__" ni terminan con "__"
       if (tabla_n1[0:3]=='__' and tabla_n1[-2:]=='__'):
         continue
         
       if len(t_tabla)==1 and tabla[1]=="Yes":
         tablas.append(tabla[0])
         
-  #Si la sección empieza por db.
+  # Si la sección empieza por db.
   if tipoSeccion=="db":
     configdb={}
     # Recorremos cada item de cada sección
@@ -57,6 +58,7 @@ for seccion in secciones:
        
 
 # Nos conectamos a la base de datos origen
+# Si la conexión es a MySQL pasaremos por este if.  
 if (configdborigen['driver']=='mysql'):
   conectbd = _mysql.connect(
             db=configdborigen['dbname'], 
@@ -64,7 +66,8 @@ if (configdborigen['driver']=='mysql'):
             host=configdborigen['host'], 
             user=configdborigen['user'], 
             passwd=configdborigen['passwd'])
-  conectbd.set_character_set("UTF8")            
+  conectbd.set_character_set("UTF8") # Hacemos la codificación a UTF8.
+# Si la conexión es a Postgres , de la siguiente manera            
 else:
   conectbd = pg.connect(
             dbname=configdborigen['dbname'], 
@@ -107,7 +110,7 @@ for tabla in tablas:
   if (configdborigen['driver']=='mysql'):
     conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
     r=conectbd.store_result()
-    filas=r.fetch_row(maxrows=0,how=1)
+    filas=r.fetch_row(maxrows=0,how=1) # Nos saca el resultado de la fila
     if (len(filas)==0):
       continue
     campos=filas[0].keys()
@@ -148,5 +151,4 @@ for tabla in tablas:
     if (porcentaje+5<=f*100/len(filas)):
       porcentaje=f*100/len(filas)
       print tabla + "(" + str(porcentaje) + "%)"
-    
   
