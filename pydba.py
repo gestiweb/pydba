@@ -33,7 +33,8 @@ def main():
                       verbose=False,
                       debug=False
                       )
-  parser.add_option("--debug",dest="debug", action="store_true", help="Print debug output")
+  parser.add_option("--debug",dest="debug", action="store_true", help="Tons of debug output")
+  parser.add_option("-v",dest="verbose", action="store_true", help="Be more verbose")
   
   g_action = OptionGroup(parser, "Actions","You MUST provide one of these:")
   
@@ -126,7 +127,7 @@ def dbconnect(options):
 #  *************************** LOAD MODULE *****
 #  
   
-def load_module(options,db=0):
+def load_module(options,db=None):
   if (not db):
     if (not options.ddb):
       print "LoadModule requiere una base de datos y no proporcionó ninguna."
@@ -136,29 +137,81 @@ def load_module(options,db=0):
       return 0
   
   modules=[]
-  try:
-    for root, dirs, files in os.walk(options.loaddir, topdown=False):
-        for name in files:
-          if (options.debug):
-            print "Searching '%s' ..." % name
-          if name[-4:]==".mod":
-            print "Found module '%s' at '%s'" % (name, root)
-            modules+=[root]
-  except:
-    print "Error trying to search modules at '%s'" % options.loaddir           
+  dirs2={}
+  for root, dirs, files in os.walk(options.loaddir):
+    FoundModule=False
+    dirs2[root]=root
+    for name in files:
+      if (options.debug):
+        print "Searching '%s' ..." % name
+      if name[-4:]==".mod":
+        FoundModule=True
+        if options.verbose:
+          print "Found module '%s' at '%s'" % (name, root)
+        modules+=[root]
+        
+    delindex=[]        
+    for index, directory in enumerate(dirs):
+      Search=not FoundModule
+      if directory[0]==".":
+        Search=False
+      if not Search:
+        delindex+=[index]
+    delindex.reverse()
+    for delete in delindex:
+      del dirs[delete]
   
+  if options.debug:      
+    dirs2=list(dirs2);
+    dirs2.sort()
+    lendir=len(options.loaddir)
+    for directory in dirs2:
+      print "Searched into '%s' directory." % directory[lendir:]
+      
   if (len(modules)==0):
     print("LoadModule requiere uno o más módulos "
           "y no se encontró ninguno en la ruta '%s'." % options.loaddir )         
     return 0
+  else:
+    print "%d modules found." % len(modules)
     
-  
+    
+  for module in modules:
+    load_module_loadone(options,module,db)
+ 
+    
+def f_ext(filename):
+  name_s=filename.split(".")
+  numsplits=len(name_s)
+  return name_s[numsplits-1]
 
+  
+def load_module_loadone(options,modpath,db):
+  module=""
+  tables=[]
+  filetypes=["xml","ui","qry","kut","qs","mtd","ts"]
+  files=[]
+  for root, dirs, walk_files in os.walk(modpath):
+      for name in walk_files:
+        if f_ext(name)=="mod":
+          module=name[:-4]
+        if f_ext(name)=="mtd":
+          table=name[:-4]
+          # print "Table: " + table
+          tables+=[table]
+        
+        if f_ext(name) in filetypes:
+          files+=[name]
+  if (options.debug):
+    print "Module: " + module  
+    print "Tables: " + str(tables)
+    print "Files: " + str(files)
+  
   
 #  *************************** REPAIR DATABASE *****
 #  
   
-def repair_db(options,db=0):
+def repair_db(options,db=None):
   if (not db):
     if (not options.ddb):
       print "RepairDB requiere una base de datos y no proporcionó ninguna."
