@@ -14,6 +14,71 @@ from optparse import OptionGroup
 import sys
 import sha
 import os
+import re
+
+
+import subprocess
+
+import xml.parsers.expat
+
+# Funcion de compatibilidad con QSA y AbanQ.
+def QT_TRANSLATE_NOOP(From,String):
+  return String
+
+class XMLParser_data:
+  _name=""
+  _data=""
+  _attrs={}
+  pass
+  
+class XMLParser:
+  root=XMLParser_data()
+  root._name="root"
+  stack=[]
+  xmlusing=root
+  num_element=1
+  def start_element(self,name, attrs):
+    method_name=name.lower()
+    if (not method_name.isalpha()):
+      num_element+=1
+      method_name="element%d" % num_element
+    
+    new=XMLParser_data()
+    setattr(self.xmlusing,method_name,new)
+
+    self.stack.append(self.xmlusing)
+    self.xmlusing=new
+    self.xmlusing._name=name
+    self.xmlusing._attrs=attrs
+    
+  def end_element(self,name):
+    if (name!=self.xmlusing._name):
+      print "WARNING: <%s> ... </%s>" % (xmlusing._name,name)
+    self.xmlusing=self.stack.pop()
+  def char_data(self,data):
+    
+    m = re.search('QT_TRANSLATE_NOOP\("([^"]*)","([^"]*)"\)', data)
+   
+    if (m):
+      data=QT_TRANSLATE_NOOP(m.group(1),m.group(2))
+    
+    self.xmlusing._data=data    
+  
+  def parseText(self,text):
+  
+    p = xml.parsers.expat.ParserCreate()
+    
+    p.StartElementHandler = self.start_element
+    p.EndElementHandler = self.end_element
+    p.CharacterDataHandler = self.char_data
+    
+    p.Parse(text, 1)
+
+
+
+def get_popen(command):
+     sp = subprocess
+     return subprocess.Popen(command.split(), stdout=sp.PIPE, stderr=sp.STDOUT)
 
 
 def SHA1(text):
@@ -30,11 +95,13 @@ def main():
                       duser="postgres", 
                       dpasswd="",
                       loaddir=".",
+                      quiet=False,
                       verbose=False,
                       debug=False
                       )
   parser.add_option("--debug",dest="debug", action="store_true", help="Tons of debug output")
   parser.add_option("-v",dest="verbose", action="store_true", help="Be more verbose")
+  parser.add_option("-q",dest="quiet", action="store_true", help="Be less verbose")
   
   g_action = OptionGroup(parser, "Actions","You MUST provide one of these:")
   
@@ -173,12 +240,14 @@ def load_module(options,db=None):
           "y no se encontró ninguno en la ruta '%s'." % options.loaddir )         
     return 0
   else:
-    print "%d modules found." % len(modules)
+    if (not options.quiet):
+      print "%d modules found." % len(modules)
     
-    
+  options.modules_loaded={}
   for module in modules:
     load_module_loadone(options,module,db)
- 
+  
+  repair_db(options,db)
     
 def f_ext(filename):
   name_s=filename.split(".")
@@ -190,28 +259,146 @@ def load_module_loadone(options,modpath,db):
   module=""
   tables=[]
   filetypes=["xml","ui","qry","kut","qs","mtd","ts"]
+  unicode_filetypes=["ui","ts"]
+  
   files=[]
   for root, dirs, walk_files in os.walk(modpath):
       for name in walk_files:
         if f_ext(name)=="mod":
           module=name[:-4]
+          f1=get_popen("iconv -f iso-8859-15 -t utf8 %s" % os.path.join(root, name))
+          contents=""
+          for line in f1.stdout:
+            contents+=line
+          
+          module_parse=XMLParser();
+          module_parse.parseText(contents);
+          d_module={
+            'name' :    module_parse.root.module.name._data,
+            'alias' :   module_parse.root.module.alias._data,
+            'area' :    module_parse.root.module.area._data,
+            'areaname' :    module_parse.root.module.areaname._data,
+            'version' :    module_parse.root.module.version._data,
+            'icon' :    module_parse.root.module.icon._data,
+            }
+          
+          f1=get_popen("iconv -f iso-8859-15 -t utf8 %s" % os.path.join(root, d_module['icon']))
+          d_module['icon_data']=""
+          for line in f1.stdout:
+            d_module['icon_data']+=line
+            
+          if (options.debug):
+            print d_module
+           
         if f_ext(name)=="mtd":
           table=name[:-4]
           # print "Table: " + table
           tables+=[table]
         
         if f_ext(name) in filetypes:
-          files+=[name]
-  if (options.debug):
-    print "Module: " + module  
-    print "Tables: " + str(tables)
-    print "Files: " + str(files)
+          
+          if f_ext(name) in unicode_filetypes:
+          
+            f1=open(os.path.join(root, name),"r")
+            raw="test"
+            contents=""
+            while(raw):
+              raw=f1.readline()
+              contents+=str(raw)
+              
+            f1.close()
+          else:
+            f1=get_popen("iconv -f iso-8859-15 -t utf8 %s" % os.path.join(root, name))
+            contents=""
+            for line in f1.stdout:
+              contents+=line
+            
+          sha=SHA1(contents)
+          
+          contents=pg.escape_string(contents)
+          
+          
+          file={'name' : name,'sha': sha, 'contents' : contents, 'root' : root}
+          if (options.modules_loaded.has_key(name)):
+            print "ERROR: %s file was already loaded." % name
+            print "--> this file was found at %s" % root
+            print "--> previous file found at %s" % options.modules_loaded[name]['root']
+            print "* skipping file"
+          else:
+            options.modules_loaded[name]=file
+            files+=[file]
   
+  habilitar_carga=False
+  qry_modulo=db.query("SELECT idmodulo, version, descripcion, bloqueo, idarea"
+                        " FROM flmodules WHERE idmodulo='%s'" % module);
+  tmodulo=qry_modulo.dictresult() 
+  cargado=False
+  for pmodulo in tmodulo:
+    cargado=True
+    if pmodulo['bloqueo']=='t':  # TRUE Es que NO está bloqueado. Está al revés.s
+      habilitar_carga=True
+  
+  if not cargado:
+    print "Se procede a crear el módulo nuevo %s" % module
+    print repr(d_module['alias'])
+    idmodulo    = pg.escape_string(d_module['name']) 
+    idarea      = pg.escape_string(d_module['area'])
+    version     = pg.escape_string(d_module['version'])
+    bloqueo     = "t"
+    descripcion = d_module['alias']
+    icono       = pg.escape_string(d_module['icon_data'])
+    print repr(descripcion)
+    
+    sql=(u"INSERT INTO flmodules (idmodulo, idarea, version, bloqueo, descripcion,icono) "  
+          "VALUES('%s','%s','%s','%s','%s','%s')" % 
+              (idmodulo, idarea, version, bloqueo, descripcion,icono))
+    db.query(sql)   
+    habilitar_carga=True   
+
+  if not habilitar_carga:
+    print "Error when trying to update the module '%s': non-loaded or locked module" % module
+    return 0
+  
+  qry_modulos=db.query("SELECT * FROM flfiles WHERE idmodulo='%s'" % module);
+  tuplas_modulos=qry_modulos.dictresult() 
+  dmodulos={}
+  for modulo in tuplas_modulos:
+    dmodulos[modulo['nombre']]=modulo;
+    
+  loaded=[]
+  
+  for file in files:
+    
+    update=True    
+    if (dmodulos.has_key(file['name'])):
+      dm=dmodulos[file['name']]
+      if (dm['sha']==file['sha']):
+        update=False
+    
+    if (update):
+      loaded+=[file['name']]
+      if (options.verbose):
+        print "* Loading file '%s' => '%s'..." % (file['name'],file['sha'])
+      sql="DELETE FROM flfiles WHERE nombre='%s';\n" % file['name']
+      db.query(sql)
+    
+      file['module']=module
+      
+      sql=("INSERT INTO flfiles (contenido, bloqueo, sha, idmodulo, nombre) "  
+            "VALUES('%(contents)s', 't', '%(sha)s','%(module)s', '%(name)s')" % file)
+      db.query(sql)
+  
+  
+  
+  
+  if (not options.quiet and len(loaded)>0): 
+    print "Module %s: loaded %d of %d files. (%s)" % (module, len(loaded), len(files),",".join(loaded))
+      
   
 #  *************************** REPAIR DATABASE *****
 #  
   
-def repair_db(options,db=None):
+def repair_db(options,db=None,mode=0):
   if (not db):
     if (not options.ddb):
       print "RepairDB requiere una base de datos y no proporcionó ninguna."
@@ -220,10 +407,10 @@ def repair_db(options,db=None):
     if (not db): 
       return 0
   
-  print "Inicializando reparación de la base de datos '%s'..." % options.ddb
+  if (options.verbose):
+    print "Inicializando reparación de la base de datos '%s'..." % options.ddb
+    print " * Calcular firmas SHA1 de files y metadata"
   
-  # Calcular SHA1 de files
-  print " * Calcular firmas SHA1 de files "
   qry_modulos=db.query("SELECT idmodulo, nombre, contenido, sha FROM flfiles ORDER BY idmodulo, nombre");
   modulos=qry_modulos.dictresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
   sql=""
@@ -234,7 +421,7 @@ def repair_db(options,db=None):
     if (modulo['sha']!=sha1):
       print "Updating " + modulo['nombre'] + " => " + sha1 + " ..."
       sql+="UPDATE flfiles SET sha='%s' WHERE nombre='%s';\n" %  (sha1,modulo['nombre'])
-    elif (options.verbose):
+    elif (options.debug):
       print modulo['nombre'] + " is ok."
     
     if (modulo['nombre'][-4:]==".mtd"):
@@ -253,9 +440,16 @@ def repair_db(options,db=None):
   if (len(sql)>0):  
     db.query(sql)
     sql=""
-    
-  db.query("UPDATE flserial SET sha='%s';" %  (resha1))
-  print "Updated flserial => %s." %  (resha1)   
+  
+  qry_serial=db.query("SELECT sha FROM flserial");
+  serials=qry_serial.dictresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
+  for serial in serials:
+    if (serial['sha']==resha1):
+      resha1=False
+        
+  if (resha1):
+    db.query("UPDATE flserial SET sha='%s';" %  (resha1))
+    print "Updated flserial => %s." %  (resha1)   
   
   
 
