@@ -300,7 +300,6 @@ def load_module_loadone(options,modpath,db):
             'icon' :    str(module_parse.root.module.icon),
             }
           d_module['icon_data']=loadfile_inutf8(root, d_module['icon'])
-          print d_module['areaname']
         if f_ext(name)=="mtd":
           table=name[:-4]
           # print "Table: " + table
@@ -322,6 +321,16 @@ def load_module_loadone(options,modpath,db):
           else:
             options.modules_loaded[name]=file
             files+=[file]
+  
+  qry_areas=db.query("SELECT descripcion, bloqueo, idarea"
+                        " FROM flareas WHERE idarea='%s'" % d_module['area'])
+  tareas=qry_areas.dictresult()            
+  if len(tareas)==0:
+    print "Creando Area %s - %s " %(d_module['area'],d_module['areaname'])
+    db.query("INSERT INTO flareas (descripcion, bloqueo, idarea)"
+                        "VALUES('%s','t','%s')" % (d_module['areaname'],d_module['area']))
+          
+                          
   
   habilitar_carga=False
   qry_modulo=db.query("SELECT idmodulo, version, descripcion, bloqueo, idarea"
