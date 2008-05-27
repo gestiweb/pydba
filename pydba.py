@@ -3,7 +3,6 @@
 
 #Importar módulo mysql para MySQL sobre Python 
 import _mysql
-# db=_mysql.connect()
 # Importar módulo PyGreSQL para Postgres sobre Python
 import pg
 # Importar módulo para leer ficheros CFG y INI
@@ -17,9 +16,31 @@ import os
 import re
 
 
-import subprocess
+# import subprocess
 
 import xml.parsers.expat
+
+    
+def f_ext(filename):
+  name_s=filename.split(".")
+  numsplits=len(name_s)
+  return name_s[numsplits-1]
+
+def loadfile_inutf8(root, name):
+  f1=open(os.path.join(root, name),"r")
+  contents=f1.read()
+  f1.close()
+  #if (f_ext(name) in ['ui','ts']):
+  #  contents=contents.decode('iso-8859-15')
+  #else:
+  #  contents=contents.decode('iso-8859-15')
+  
+  contents=contents.decode('iso-8859-15')
+  contents=contents.encode('utf8')
+  return contents
+      
+      
+
 
 # Funcion de compatibilidad con QSA y AbanQ.
 def QT_TRANSLATE_NOOP(From,String):
@@ -29,6 +50,9 @@ class XMLParser_data:
   _name=""
   _data=""
   _attrs={}
+  def __str__(self):
+    return self._data.encode('utf8')
+    
   pass
   
 class XMLParser:
@@ -37,6 +61,8 @@ class XMLParser:
   stack=[]
   xmlusing=root
   num_element=1
+  
+  
   def start_element(self,name, attrs):
     method_name=name.lower()
     if (not method_name.isalpha()):
@@ -248,11 +274,7 @@ def load_module(options,db=None):
     load_module_loadone(options,module,db)
   
   repair_db(options,db)
-    
-def f_ext(filename):
-  name_s=filename.split(".")
-  numsplits=len(name_s)
-  return name_s[numsplits-1]
+
 
   
 def load_module_loadone(options,modpath,db):
@@ -266,30 +288,19 @@ def load_module_loadone(options,modpath,db):
       for name in walk_files:
         if f_ext(name)=="mod":
           module=name[:-4]
-          f1=get_popen("iconv -f iso-8859-15 -t utf8 %s" % os.path.join(root, name))
-          contents=""
-          for line in f1.stdout:
-            contents+=line
-          
-          module_parse=XMLParser();
-          module_parse.parseText(contents);
+          file_module=loadfile_inutf8(root, name)
+          module_parse=XMLParser()
+          module_parse.parseText(file_module)
           d_module={
-            'name' :    module_parse.root.module.name._data,
-            'alias' :   module_parse.root.module.alias._data,
-            'area' :    module_parse.root.module.area._data,
-            'areaname' :    module_parse.root.module.areaname._data,
-            'version' :    module_parse.root.module.version._data,
-            'icon' :    module_parse.root.module.icon._data,
+            'name' :    str(module_parse.root.module.name),
+            'alias' :   str(module_parse.root.module.alias),
+            'area' :    str(module_parse.root.module.area),
+            'areaname' :    str(module_parse.root.module.areaname),
+            'version' :    str(module_parse.root.module.version),
+            'icon' :    str(module_parse.root.module.icon),
             }
-          
-          f1=get_popen("iconv -f iso-8859-15 -t utf8 %s" % os.path.join(root, d_module['icon']))
-          d_module['icon_data']=""
-          for line in f1.stdout:
-            d_module['icon_data']+=line
-            
-          if (options.debug):
-            print d_module
-           
+          d_module['icon_data']=loadfile_inutf8(root, d_module['icon'])
+          print d_module['areaname']
         if f_ext(name)=="mtd":
           table=name[:-4]
           # print "Table: " + table
@@ -297,24 +308,8 @@ def load_module_loadone(options,modpath,db):
         
         if f_ext(name) in filetypes:
           
-          if f_ext(name) in unicode_filetypes:
-          
-            f1=open(os.path.join(root, name),"r")
-            raw="test"
-            contents=""
-            while(raw):
-              raw=f1.readline()
-              contents+=str(raw)
-              
-            f1.close()
-          else:
-            f1=get_popen("iconv -f iso-8859-15 -t utf8 %s" % os.path.join(root, name))
-            contents=""
-            for line in f1.stdout:
-              contents+=line
-            
+          contents=loadfile_inutf8(root,name)
           sha=SHA1(contents)
-          
           contents=pg.escape_string(contents)
           
           
@@ -340,16 +335,15 @@ def load_module_loadone(options,modpath,db):
   
   if not cargado:
     print "Se procede a crear el módulo nuevo %s" % module
-    print repr(d_module['alias'])
+    
     idmodulo    = pg.escape_string(d_module['name']) 
     idarea      = pg.escape_string(d_module['area'])
     version     = pg.escape_string(d_module['version'])
     bloqueo     = "t"
-    descripcion = d_module['alias']
+    descripcion = pg.escape_string(d_module['alias'])
     icono       = pg.escape_string(d_module['icon_data'])
-    print repr(descripcion)
     
-    sql=(u"INSERT INTO flmodules (idmodulo, idarea, version, bloqueo, descripcion,icono) "  
+    sql=("INSERT INTO flmodules (idmodulo, idarea, version, bloqueo, descripcion,icono) "  
           "VALUES('%s','%s','%s','%s','%s','%s')" % 
               (idmodulo, idarea, version, bloqueo, descripcion,icono))
     db.query(sql)   
@@ -447,158 +441,162 @@ def repair_db(options,db=None,mode=0):
     if (serial['sha']==resha1):
       resha1=False
         
+          
   if (resha1):
-    db.query("UPDATE flserial SET sha='%s';" %  (resha1))
-    print "Updated flserial => %s." %  (resha1)   
-  
+    if len(serials)>0:
+      db.query("UPDATE flserial SET sha='%s';" %  (resha1))
+      print "Updated flserial => %s." %  (resha1)   
+    else:    
+      db.query("INSERT INTO flserial (serie,sha) VALUES(1,'%s')" %  (resha1))
+      print "Created flserial => %s." %  (resha1)   
   
 
 
 
 
 
-def exec_ini():
-  # Abrimos el archivo y leemos el fichero de configuración "replicas.ini"
-  ini = ConfigParser.ConfigParser()
-  ini.readfp(open('replicas.ini'))
+#def exec_ini():
+  ## Abrimos el archivo y leemos el fichero de configuración "replicas.ini"
+  #ini = ConfigParser.ConfigParser()
+  #ini.readfp(open('replicas.ini'))
   
-  # Inicializamos lista de tablas
-  tablas=[]
+  ## Inicializamos lista de tablas
+  #tablas=[]
   
-  # Añadimos a la variable secciones los diferentes modulos del archivo replicas.ini
-  secciones=ini.sections()
+  ## Añadimos a la variable secciones los diferentes modulos del archivo replicas.ini
+  #secciones=ini.sections()
   
-  # Recorremos los módulos (secciones) del archivo
-  for seccion in secciones:
-    items_seccion=ini.items(seccion)
-    tsec=seccion.split(".") # Divide la cadena por el caracter que le indicas
-    tipoSeccion=tsec[0] # Primera parte de los nombres de cada sección del archivo
-    nombreSeccion=tsec[1] # Segunda parte de los nombres de cada sección del archivo
-    # Si la sección empieza por mod.
-    if tipoSeccion=="mod":
-      # Recorremos los campos de cada tabla
-      # Dividimos de cada modulo los campos en los que aparece un punto
-      for tabla in items_seccion:    
-        t_tabla=tabla[0].split(".")
-        if (len(t_tabla)>0):
-          tabla_n1=t_tabla[0]
-        if (len(t_tabla)>1):
-          tabla_n2=t_tabla[1]
-        # Cogemos los campos que no empiezan por "__" ni terminan con "__"
-        if (tabla[0:3]=='__'):
-          continue
+  ## Recorremos los módulos (secciones) del archivo
+  #for seccion in secciones:
+    #items_seccion=ini.items(seccion)
+    #tsec=seccion.split(".") # Divide la cadena por el caracter que le indicas
+    #tipoSeccion=tsec[0] # Primera parte de los nombres de cada sección del archivo
+    #nombreSeccion=tsec[1] # Segunda parte de los nombres de cada sección del archivo
+    ## Si la sección empieza por mod.
+    #if tipoSeccion=="mod":
+      ## Recorremos los campos de cada tabla
+      ## Dividimos de cada modulo los campos en los que aparece un punto
+      #for tabla in items_seccion:    
+        #t_tabla=tabla[0].split(".")
+        #if (len(t_tabla)>0):
+          #tabla_n1=t_tabla[0]
+        #if (len(t_tabla)>1):
+          #tabla_n2=t_tabla[1]
+        ## Cogemos los campos que no empiezan por "__" ni terminan con "__"
+        #if (tabla[0:3]=='__'):
+          #continue
           
-        if len(t_tabla)==1 and tabla[1]=="Yes":
-          tablas.append(tabla[0])
+        #if len(t_tabla)==1 and tabla[1]=="Yes":
+          #tablas.append(tabla[0])
           
-    # Si la sección empieza por db.
-    if tipoSeccion=="db":
-      configdb={}
-      # Recorremos cada item de cada sección
-      for item in items_seccion:
-        configdb[item[0]]=item[1]
+    ## Si la sección empieza por db.
+    #if tipoSeccion=="db":
+      #configdb={}
+      ## Recorremos cada item de cada sección
+      #for item in items_seccion:
+        #configdb[item[0]]=item[1]
       
-      if nombreSeccion=="origen":
-        configdborigen = configdb
+      #if nombreSeccion=="origen":
+        #configdborigen = configdb
         
-      if nombreSeccion=="destino":
-        configdbdestino = configdb
+      #if nombreSeccion=="destino":
+        #configdbdestino = configdb
         
   
-  # Nos conectamos a la base de datos origen
-  # Si la conexión es a MySQL pasaremos por este if.  
-  if (configdborigen['driver']=='mysql'):
-    conectbd = _mysql.connect(
-              db=configdborigen['dbname'], 
-              port=int(configdborigen['port']),
-              host=configdborigen['host'], 
-              user=configdborigen['user'], 
-              passwd=configdborigen['passwd'])
-    conectbd.set_character_set("UTF8") # Hacemos la codificación a UTF8.
-  # Si la conexión es a Postgres , de la siguiente manera            
-  else:
-    conectbd = pg.connect(
-              dbname=configdborigen['dbname'], 
-              port=int(configdborigen['port']),
-              host=configdborigen['host'], 
-              user=configdborigen['user'], 
-              passwd=configdborigen['passwd'])
+  ## Nos conectamos a la base de datos origen
+  ## Si la conexión es a MySQL pasaremos por este if.  
+  #if (configdborigen['driver']=='mysql'):
+    #conectbd = _mysql.connect(
+              #db=configdborigen['dbname'], 
+              #port=int(configdborigen['port']),
+              #host=configdborigen['host'], 
+              #user=configdborigen['user'], 
+              #passwd=configdborigen['passwd'])
+    #conectbd.set_character_set("UTF8") # Hacemos la codificación a UTF8.
+  ## Si la conexión es a Postgres , de la siguiente manera            
+  #else:
+    #conectbd = pg.connect(
+              #dbname=configdborigen['dbname'], 
+              #port=int(configdborigen['port']),
+              #host=configdborigen['host'], 
+              #user=configdborigen['user'], 
+              #passwd=configdborigen['passwd'])
   
-  # Nos conectamos a la base de datos destino
-  psql = pg.connect(
-              dbname=configdbdestino['dbname'], 
-              port=int(configdbdestino['port']),
-              host=configdbdestino['host'], 
-              user=configdbdestino['user'], 
-              passwd=configdbdestino['passwd']
-              )
+  ## Nos conectamos a la base de datos destino
+  #psql = pg.connect(
+              #dbname=configdbdestino['dbname'], 
+              #port=int(configdbdestino['port']),
+              #host=configdbdestino['host'], 
+              #user=configdbdestino['user'], 
+              #passwd=configdbdestino['passwd']
+              #)
               
-  # Hacemos una consulta para sacar las tablas que concuerdan con la restriccion LIKE 'fl%'
+  ## Hacemos una consulta para sacar las tablas que concuerdan con la restriccion LIKE 'fl%'
+  ##qry_tablas = psql.query(
+  ##  "select table_name from information_schema.tables"   
+  ##  " where table_schema='public' and table_type='BASE TABLE' and table_name LIKE 'fl%%'")
+  
   #qry_tablas = psql.query(
-  #  "select table_name from information_schema.tables"   
-  #  " where table_schema='public' and table_type='BASE TABLE' and table_name LIKE 'fl%%'")
-  
-  qry_tablas = psql.query(
-    "select table_name from information_schema.tables"   
-    " where table_schema='public' and table_type='BASE TABLE'")
+    #"select table_name from information_schema.tables"   
+    #" where table_schema='public' and table_type='BASE TABLE'")
     
-  # Guardamos el resultado de la consulta anterior en la variable
-  tupla_tablas=qry_tablas.getresult()
+  ## Guardamos el resultado de la consulta anterior en la variable
+  #tupla_tablas=qry_tablas.getresult()
   
   
-  # Añadimos valores de tupla_tablas a tablas
-  for tupla in tupla_tablas:
-    tablas.append(tupla[0])
+  ## Añadimos valores de tupla_tablas a tablas
+  #for tupla in tupla_tablas:
+    #tablas.append(tupla[0])
   
     
-  for tabla in tablas:
-    print tabla
-      #tablas.append(tabla[0])
-    qry_deltables= psql.query("delete from %s" % tabla)
-    if (configdborigen['driver']=='mysql'):
-      conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
-      r=conectbd.store_result()
-      filas=r.fetch_row(maxrows=0,how=1) # Nos saca el resultado de la fila
-      if (len(filas)==0):
-        continue
-      campos=filas[0].keys()
-    else:  
-      qry_seltables= conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
-      filas=qry_seltables.getresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
-      campos=qry_seltables.listfields() # Cargamos la lista de nombres de campos a la variable campos
+  #for tabla in tablas:
+    #print tabla
+      ##tablas.append(tabla[0])
+    #qry_deltables= psql.query("delete from %s" % tabla)
+    #if (configdborigen['driver']=='mysql'):
+      #conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
+      #r=conectbd.store_result()
+      #filas=r.fetch_row(maxrows=0,how=1) # Nos saca el resultado de la fila
+      #if (len(filas)==0):
+        #continue
+      #campos=filas[0].keys()
+    #else:  
+      #qry_seltables= conectbd.query("select * from %s" % tabla) # Hacemos una select del contenido de la tabla
+      #filas=qry_seltables.getresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
+      #campos=qry_seltables.listfields() # Cargamos la lista de nombres de campos a la variable campos
     
-    sqlvars={}
-    sqlvars['tabla']=tabla
-    separador=", "
-    sqlvars['fields']=separador.join(campos)
-    # *** Inicio proceso de insert into en la tabla
-    # insert into table (field1,field2) VALUES (val1,val2),(val1,val2),(val1,val2)
-    f=0
-    bytes=0
-    porcentaje=0
-    for fila in filas:
-      n=0
-      valores=[]
-      for campo in fila:
-        if (configdborigen['driver']=='mysql'):
-          campo=fila[campo]
+    #sqlvars={}
+    #sqlvars['tabla']=tabla
+    #separador=", "
+    #sqlvars['fields']=separador.join(campos)
+    ## *** Inicio proceso de insert into en la tabla
+    ## insert into table (field1,field2) VALUES (val1,val2),(val1,val2),(val1,val2)
+    #f=0
+    #bytes=0
+    #porcentaje=0
+    #for fila in filas:
+      #n=0
+      #valores=[]
+      #for campo in fila:
+        #if (configdborigen['driver']=='mysql'):
+          #campo=fila[campo]
         
-        if (campo is not None):#Si el valor es nulo
-          valores.append("'" + pg.escape_string(str(campo)) + "'")
-        else:
-          valores.append("NULL")
-        n+=1
-      text="(" + separador.join(valores) + ")"
-      bytes+=len(text)
-      f+=1
-      # En postgres no funcionan los insert multilínea
-      sqlvars['rows']=text
-      sql_text="INSERT INTO %(tabla)s (%(fields)s) VALUES %(rows)s;" % sqlvars
-      qry_instables=psql.query(sql_text)
-      bytes=0
-      if (porcentaje+5<=f*100/len(filas)):
-        porcentaje=f*100/len(filas)
-        print tabla + "(" + str(porcentaje) + "%)"
+        #if (campo is not None):#Si el valor es nulo
+          #valores.append("'" + pg.escape_string(str(campo)) + "'")
+        #else:
+          #valores.append("NULL")
+        #n+=1
+      #text="(" + separador.join(valores) + ")"
+      #bytes+=len(text)
+      #f+=1
+      ## En postgres no funcionan los insert multilínea
+      #sqlvars['rows']=text
+      #sql_text="INSERT INTO %(tabla)s (%(fields)s) VALUES %(rows)s;" % sqlvars
+      #qry_instables=psql.query(sql_text)
+      #bytes=0
+      #if (porcentaje+5<=f*100/len(filas)):
+        #porcentaje=f*100/len(filas)
+        #print tabla + "(" + str(porcentaje) + "%)"
     
 if __name__ == "__main__":
   main()
