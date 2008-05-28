@@ -30,11 +30,6 @@ def loadfile_inutf8(root, name):
   f1=open(os.path.join(root, name),"r")
   contents=f1.read()
   f1.close()
-  #if (f_ext(name) in ['ui','ts']):
-  #  contents=contents.decode('iso-8859-15')
-  #else:
-  #  contents=contents.decode('iso-8859-15')
-  
   contents=contents.decode('iso-8859-15')
   contents=contents.encode('utf8')
   return contents
@@ -50,18 +45,22 @@ class XMLParser_data:
   _name=""
   _data=""
   _attrs={}
+  def __getitem__(self, key):
+    return self
+      
+  def __len__(self):
+    return 1
+      
+  def __iter__(self):
+    return iter([self])
+  
   def __str__(self):
     return self._data.encode('utf8')
     
   pass
   
 class XMLParser:
-  root=XMLParser_data()
-  root._name="root"
-  stack=[]
-  xmlusing=root
-  num_element=1
-  
+ 
   
   def start_element(self,name, attrs):
     method_name=name.lower()
@@ -70,8 +69,19 @@ class XMLParser:
       method_name="element%d" % num_element
     
     new=XMLParser_data()
-    setattr(self.xmlusing,method_name,new)
-
+    if (not hasattr(self.xmlusing,method_name)):
+      setattr(self.xmlusing,method_name,new)
+    else:
+      # -> Si ya existía un atributo con este nombre, hay que convertirlo a lista.
+      prevattr=getattr(self.xmlusing,method_name)
+      if (isinstance(prevattr, XMLParser_data)):
+        # Si el atributo anterior era una clase de datos, lo pasamos a lista
+        prevattr=[prevattr]
+      
+      # Agregamos new
+      prevattr.append(new)
+      setattr(self.xmlusing,method_name,prevattr)
+      
     self.stack.append(self.xmlusing)
     self.xmlusing=new
     self.xmlusing._name=name
@@ -91,6 +101,11 @@ class XMLParser:
     self.xmlusing._data=data    
   
   def parseText(self,text):
+    self.root=XMLParser_data()
+    self.root._name="root"
+    self.stack=[]
+    self.xmlusing=self.root
+    self.num_element=1
   
     p = xml.parsers.expat.ParserCreate()
     
@@ -394,12 +409,90 @@ def load_module(options,db=None):
     load_module_loadone(options,module,db)
   
   repair_db(options,db)
-
-
+  
+# Crea una tabla según las especificaciones del MTD
+def create_table(db,table,mtd,existent_fields=[]):
+  existent_fields=set(existent_fields)
+  txtfields=[]
+  typetr={
+    'string' : 'character varying',
+    'double' : 'double precision',
+    'number' : 'integer',
+    'int' : 'integer',
+    'uint' : 'integer',
+    'unit' : 'smallint',
+    'stringlist' : 'text',
+    'pixmap' : 'text',
+    'unlock' : 'boolean',
+  }
+  constraints=[]
+  indexes=[]
+  if len(existent_fields)>0:
+    mode="alter"
+  else:
+    mode="create"
+    
+  for field in mtd.field:
+    if not str(field.name) in existent_fields:
+      row={}
+      row['name']=str(field.name)
+      if hasattr(field,"type"):
+        row['type']=str(getattr(field,"type"))
+      else:
+        print "ERROR: No se encontró tipo de datos para %s.%s - se asume int." % (table,str(field.name))
+        row['type']="int"
+        
+      if typetr.has_key(row['type']):
+        row['type']=typetr[row['type']]
+        
+      if hasattr(field,"length") and row['type']=='character varying':
+        row['type']+="(%d)" % int(str(field.length))
+      row['options']=""
+      
+      if hasattr(field,"null"):
+        if field.null=='false':    
+          row['options']+=" NOT NULL"
+          
+        if field.null=='true':    
+          row['options']+=" NULL"
+        
+      if hasattr(field,"pk"):
+        if field.pk=='true':
+          if mode=="create":
+            constraints+=["CONSTRAINT %s_pkey PRIMARY KEY (%s)" % (table,row['name'])]
+          else:
+            print("ERROR: Cannot alter table to add '%s' as a primary key!."
+                  " Delete table '%s' and try again." % (row['name'],table))
+      
+      if hasattr(field,"relation"):
+        for relation in field.relation:
+          if hasattr(relation,"card"):
+            if relation.card=='M1':
+              if row['type']=="character varying":
+                indexes+=["CREATE INDEX %s_%s_m1_idx" 
+                          "    ON %s USING btree (%s text_pattern_ops);" % (table,row['name'],table,row['name'])]
+                indexes+=["CREATE INDEX %s_%sup_m1_idx" 
+                          "    ON %s USING btree (upper(%s::text) text_pattern_ops);" 
+                                    % (table,row['name'],table,row['name'])]
+              else:
+                indexes+=["CREATE INDEX %s_%s_m1_idx" 
+                          "    ON %s USING btree (%s);" % (table,row['name'],table,row['name'])]
+          else:
+            print "WARNING: %s.%s has one relation without 'card' tag" % (table,row['name'])
+        
+      txtfields+=["\"%(name)s\" %(type)s %(options)s" % row]
+  
+  if mode=="create":
+    txtfields+=constraints
+    txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS; %s" % (table, ",\n".join(txtfields), "\n".join(indexes))
+    db.query(txtcreate)
+  
+  
   
 def load_module_loadone(options,modpath,db):
   module=""
   tables=[]
+  mtd_files={}
   filetypes=["xml","ui","qry","kut","qs","mtd","ts"]
   unicode_filetypes=["ui","ts"]
   
@@ -422,8 +515,12 @@ def load_module_loadone(options,modpath,db):
           d_module['icon_data']=loadfile_inutf8(root, d_module['icon'])
         if f_ext(name)=="mtd":
           table=name[:-4]
-          # print "Table: " + table
+          # print "### Table: " + table
           tables+=[table]
+          mtd_files[table]=loadfile_inutf8(root, name)
+          
+            
+          
         
         if f_ext(name) in filetypes:
           
@@ -518,8 +615,41 @@ def load_module_loadone(options,modpath,db):
     print "Module %s: loaded %d of %d files. (%s)" % (module, len(loaded), len(files),",".join(loaded))
       
   
+  
+def load_mtd(options,db,table,file_mtd):
+  mtd_parse=XMLParser()
+  mtd_parse.parseText(file_mtd)
+  mtd=mtd_parse.root.tmd
+  if str(mtd.name)!=table:
+    print "WARNING: Expected '%s' in MTD name but found '%s' ***" % (table,str(mtd.name))
+  
+  qry_columns=db.query("select * from information_schema.columns WHERE table_schema = 'public' AND table_name='%s'" % table)
+  #aux_columns
+  tablefields={}
+  aux_columns=qry_columns.dictresult()
+  for column in aux_columns:
+    tablefields[column['column_name']]=column
+    
+  if len(tablefields)==0:
+    if (options.debug):
+      print "Creando tabla '%s' ..." % table
+    create_table(db,table,mtd)
+  else:
+    
+    for field in mtd.field:
+      name=str(field.name)
+      if not tablefields.has_key(name):
+        print "ERROR: La columna '%s' no existe en la tabla '%s'" % (name,table)
+      #print "*****"
+      #for atr in dir(field):
+      #  if (atr[0]!='_'):
+      #    print "%s : '%s'" % (atr,getattr(field,atr))
+      
+    
+  
 #  *************************** REPAIR DATABASE *****
 #  
+  
   
 def repair_db(options,db=None,mode=0):
   if (not db):
@@ -551,11 +681,18 @@ def repair_db(options,db=None,mode=0):
       tabla=modulo['nombre'][:-4]
       qry_modulos=db.query("SELECT xml FROM flmetadata WHERE tabla='%s'" % tabla);
       tablas=qry_modulos.dictresult() 
+      TablaCargada=False
       for txml in tablas:
+        TablaCargada=True
         if txml['xml']!=sha1:
           print "Actualizada la Tabla: " + tabla
           sql+="UPDATE flmetadata SET xml='%s' WHERE tabla='%s';\n" %  (sha1,tabla)
-      
+      if not TablaCargada:
+          print "Cargando tabla nueva %s ..." % tabla
+          sql+="INSERT INTO flmetadata (tabla,bloqueo,seq,xml) VALUES('%s','f','0','%s');\n" %  (tabla,sha1)
+        
+      load_mtd(options,db,tabla,modulo['contenido'])
+        
     if (len(sql)>1024):
       db.query(sql)
       sql=""
@@ -578,6 +715,13 @@ def repair_db(options,db=None,mode=0):
     else:    
       db.query("INSERT INTO flserial (serie,sha) VALUES(1,'%s')" %  (resha1))
       print "Created flserial => %s." %  (resha1)   
+  
+  
+  # **************** COSAS QUE FALTAN POR REPARAR ********************
+  
+  # Reparar Secuencias de PostgreSQL, comprobar último número
+  # Reparar Secuencias de AbanQ Contabilidad
+  # Reparar Secuencias de AbanQ Facturacion
   
 
 
