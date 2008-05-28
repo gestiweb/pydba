@@ -116,7 +116,15 @@ class XMLParser:
     p.Parse(text, 1)
 
 def SHA1(text):
-  return sha.new(text).hexdigest();
+  try:
+    utext=text.decode("utf8")
+    isotext=utext.encode("iso-8859-15")
+  except:
+    print "WARNING: Error al convertir texto utf8 a iso-8859-15. Se utiliza el utf8 en su lugar."
+    isotext=text
+    print "Unexpected error:", sys.exc_info()[0]
+    raise
+  return sha.new(isotext).hexdigest();
 
 def main():
   
@@ -450,14 +458,17 @@ def create_table(db,table,mtd,existent_fields=[]):
       row['options']=""
       
       if hasattr(field,"null"):
-        if field.null=='false':    
+        if str(field.null)=='false':    
           row['options']+=" NOT NULL"
           
-        if field.null=='true':    
-          row['options']+=" NULL"
+        if str(field.null)=='true':    
+          if row['type']=='serial':
+            print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
+          else:
+            row['options']+=" NULL"
         
       if hasattr(field,"pk"):
-        if field.pk=='true':
+        if str(field.pk)=='true':
           if mode=="create":
             constraints+=["CONSTRAINT %s_pkey PRIMARY KEY (%s)" % (table,row['name'])]
           else:
@@ -485,7 +496,12 @@ def create_table(db,table,mtd,existent_fields=[]):
   if mode=="create":
     txtfields+=constraints
     txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS; %s" % (table, ",\n".join(txtfields), "\n".join(indexes))
-    db.query(txtcreate)
+    try:
+      db.query(txtcreate)
+    except:
+      print txtcreate
+      print "Unexpected error:", sys.exc_info()[0]
+      raise      
   
   
   
@@ -664,7 +680,7 @@ def repair_db(options,db=None,mode=0):
     print "Inicializando reparación de la base de datos '%s'..." % options.ddb
     print " * Calcular firmas SHA1 de files y metadata"
   
-  qry_modulos=db.query("SELECT idmodulo, nombre, contenido, sha FROM flfiles ORDER BY idmodulo, nombre");
+  qry_modulos=db.query("SELECT idmodulo, nombre, contenido, sha FROM flfiles WHERE sha!='' ORDER BY idmodulo, nombre");
   modulos=qry_modulos.dictresult() # El resultado de la consulta anterior lo volcamos en una variable de lista
   sql=""
   resha1="";
