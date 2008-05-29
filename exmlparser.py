@@ -96,6 +96,7 @@ class XMLParser:
         p.CharacterDataHandler = self.char_data
         try:
             p.Parse(text, 1)
-        except:
-            # print "ERROR: XMLParse failed."
+        except Expat.ExpatError, inst:
+            print "___________"
+            print inst.args 
             self.root=None
