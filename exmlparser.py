@@ -22,19 +22,28 @@ class XMLParser_data:
     def __str__(self):
         return self._data.encode('utf8')
 
+
+
 # Funcion de compatibilidad con QSA y AbanQ.
 def QT_TRANSLATE_NOOP(From,String):
     return String
   
 class XMLParser:
     
+    reserved_words=('and','assert','break','class','continue','def','del','elif','else',
+                'except','exec','finally','for','from','global','if','import','in','is',
+                'lambda','not','or','pass','print','raise','return','try','while',
+                'Data','Float','Int','Numeric','Oxphys','array','close','float',
+                'int','input','open','range','type','write','zeros')
     
     def start_element(self,name, attrs):
         method_name=name.lower()
         if (not method_name.isalpha()):
             num_element+=1
             method_name="element%d" % num_element
-        
+        if (method_name in self.reserved_words):
+            method_name+="_"
+            
         new=XMLParser_data()
         if (not hasattr(self.xmlusing,method_name)):
             setattr(self.xmlusing,method_name,new)
@@ -62,10 +71,14 @@ class XMLParser:
         
         
     def char_data(self,data):
-        m = re.search('QT_TRANSLATE_NOOP\("([^"]*)","([^"]*)"\)', data)
-        if (m):
-            data=QT_TRANSLATE_NOOP(m.group(1),m.group(2))
-        
+        atext=data.split(";")
+        ret=[]
+        for text in atext:
+            m = re.search('QT_TRANSLATE_NOOP\("([^"]*)","([^"]*)"\)', text)
+            if (m):
+                ret+=[QT_TRANSLATE_NOOP(m.group(1),m.group(2))]
+        if len(ret):
+            data=";".join(ret)
         self.xmlusing._data=data        
     
     
@@ -81,5 +94,8 @@ class XMLParser:
         p.StartElementHandler = self.start_element
         p.EndElementHandler = self.end_element
         p.CharacterDataHandler = self.char_data
-        
-        p.Parse(text, 1)
+        try:
+            p.Parse(text, 1)
+        except:
+            # print "ERROR: XMLParse failed."
+            self.root=None

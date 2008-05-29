@@ -25,14 +25,22 @@ def loadfile_inutf8(root, name):
 
 # Crear una firma SHA1 preferentemente a partir de iso-8859-15
 def SHA1(text):
-    try:
-        utext=text.decode("utf8")
-        isotext=utext.encode("iso-8859-15")
-    except:
-        print("WARNING: Error al convertir texto utf8 a iso-8859-15."
-                " Se utiliza el utf8 en su lugar.")
-        isotext=text
-        raise
+    utext=text.decode("utf8")
+    isotext=""
+    for line in utext.split("\n"):
+        line+="\n"
+        try:
+            isotext+=line.encode("iso-8859-15")
+        except:
+            try:
+                isotext+=line.encode("windows-1250")
+            except:
+                try:
+                    isotext+=line.encode("iso-8859-1")
+                except:
+                    print line
+                    return None
+    
     return sha.new(isotext).hexdigest();
 
 

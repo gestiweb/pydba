@@ -7,6 +7,8 @@ import _mysql     # depends - python-mysqldb
         
 from pydba_utils import *
 from pydba_mtdparser import load_mtd    
+from exmlparser import XMLParser
+
 #    *************************** REPAIR DATABASE *****
 #    
     
@@ -25,12 +27,27 @@ def repair_db(options,db=None,mode=0):
         print " * Calcular firmas SHA1 de files y metadata"
     
     qry_modulos=db.query("SELECT idmodulo, nombre, contenido, sha "
-                    "FROM flfiles WHERE sha!='' ORDER BY idmodulo, nombre");
+                    "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' ORDER BY idmodulo, nombre");
     modulos=qry_modulos.dictresult() 
     sql=""
     resha1="";
+    xmlfiles=("xml","ui","qry","kut","mtd","ts")
     for modulo in modulos:
+        xml=None
         sha1=SHA1(modulo['contenido'])
+        if (sha1==None):
+            print "ERROR: Carácteres no ISO en %s.%s (se omite SHA1)" % (modulo['idmodulo'],modulo['nombre'])
+            raise
+            sha1=modulo['sha']
+        
+        if f_ext(modulo['nombre']) in xmlfiles:
+            xml=XMLParser()
+            xml.parseText(modulo['contenido'])
+            if xml.root==None:
+                print "ERROR: Failed to parse xml %s.%s" %  (modulo['idmodulo'],modulo['nombre'])
+                xml=None
+            
+        
         resha1=SHA1(resha1+sha1)
         if (modulo['sha']!=sha1):
             print "Updating " + modulo['nombre'] + " => " + sha1 + " ..."
@@ -38,7 +55,7 @@ def repair_db(options,db=None,mode=0):
         elif (options.debug):
             print modulo['nombre'] + " is ok."
         
-        if (modulo['nombre'][-4:]==".mtd"):
+        if (f_ext(modulo['nombre'])=="mtd"):
             tabla=modulo['nombre'][:-4]
             qry_modulos=db.query("SELECT xml FROM flmetadata WHERE tabla='%s'" % tabla);
             tablas=qry_modulos.dictresult() 
@@ -52,8 +69,8 @@ def repair_db(options,db=None,mode=0):
                     print "Cargando tabla nueva %s ..." % tabla
                     sql+=("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
                         " VALUES('%s','f','0','%s');\n" % (tabla,sha1))
-                
-            load_mtd(options,db,tabla,modulo['contenido'])
+            if xml:
+                load_mtd(options,db,tabla,xml)
                 
         if (len(sql)>1024):
             db.query(sql)
