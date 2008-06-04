@@ -263,7 +263,7 @@ def load_mtd(options,db,table,mtd_parse):
             print "Creando tabla '%s' ..." % table
         create_table(db,table,mtd)
     else:
-        Regenerar=False
+        Regenerar=options.rebuildtables
         
         for field in mtd.field:
             name=str(field.name)
@@ -282,25 +282,26 @@ def load_mtd(options,db,table,mtd_parse):
             create_table(db,table,mtd)
             import_table(options,db,table,data,mparser.field)
             
-            try:
-                for pkey in mparser.primary_key:
-                    tfield=mparser.field[pkey]
-                    if tfield.dtype=='serial':
-                        qry_serial=db.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
-                        dr_serial=qry_serial.dictresult()
-                        for dserial in dr_serial:
-                            serial=dserial['serial']
+        try:
+            for pkey in mparser.primary_key:
+                tfield=mparser.field[pkey]
+                if tfield.dtype=='serial':
+                    qry_serial=db.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
+                    dr_serial=qry_serial.dictresult()
+                    for dserial in dr_serial:
+                        serial=dserial['serial']
+                        if serial:
                             qry_maxserial=db.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
                             max_serial=1
                             dr_maxserial=qry_maxserial.dictresult()
                             for dmaxserial in dr_maxserial:
                                 if dmaxserial['max']:
                                     max_serial=dmaxserial['max']+1
-                            
+        
                             db.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
-            except:
-                print "PKeys: %s" % mparser.primary_key
-                raise                                
+        except:
+            print "PKeys: %s" % mparser.primary_key
+            raise
                 
         
         

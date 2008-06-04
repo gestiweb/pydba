@@ -23,6 +23,7 @@ def main():
                         verbose=False,
                         debug=False,
                         full=False,
+												rebuildtables=False,
                         )
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -35,6 +36,9 @@ def main():
     
     parser.add_option("--full", help="Deeper and slower checks"
                         ,dest="full", action="store_true")
+    
+    parser.add_option("--rebuildtables", help="DROP and CREATE tables again"
+                        ,dest="rebuildtables", action="store_true")
     
     g_action = optparse.OptionGroup(parser, "Actions","You MUST provide one of :")
     
