@@ -22,6 +22,7 @@ def main():
                         quiet=False,
                         verbose=False,
                         debug=False,
+                        full=False,
                         )
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -31,6 +32,9 @@ def main():
                         
     parser.add_option("-q", help="Quiet. Produce less output."
                         ,dest="quiet", action="store_true")
+    
+    parser.add_option("--full", help="Deeper and slower checks"
+                        ,dest="full", action="store_true")
     
     g_action = optparse.OptionGroup(parser, "Actions","You MUST provide one of :")
     

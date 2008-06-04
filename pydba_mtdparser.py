@@ -72,7 +72,7 @@ class MTDParser:
             print "ERROR: Field pk ommitted in MTD %s.%s" % (table,name)
         
         if not hasattr(field,"null"):
-            field.null='false'  # AbanQ permite omitir NULL.
+            field.null='true'  # AbanQ permite omitir NULL.
            
         if hasattr(field,"relation"):
             for relation in field.relation:
@@ -106,6 +106,7 @@ class MTDParser:
             tfield.pk=False
         elif str(field.pk)=='true':
             tfield.pk=True
+            self.primary_key+=[tfield.name]
         else:
             print "ERROR: Unknown pk '%s' in Field %s.%s." % (str(field.pk),table,name)
         
@@ -122,8 +123,11 @@ class MTDParser:
         
     
     def parse_mtd(self,mtd):
+        self.field={}
+        self.primary_key=[]        
         for field in mtd.field:
-            field=self.check_field_attrs(field,mtd.name)
+            tfield=self.check_field_attrs(field,mtd.name)
+            self.field[tfield.name]=tfield
             
         
 
@@ -172,7 +176,7 @@ def create_table(db,table,mtd,existent_fields=[]):
             row['options']=""
             
             if hasattr(field,"null"):
-                if str(field.null)=='false':        
+                if str(field.null)=='false' and not hasattr(field,"calculated"):        
                     row['options']+=" NOT NULL"
                     
                 if str(field.null)=='true':        
@@ -180,7 +184,12 @@ def create_table(db,table,mtd,existent_fields=[]):
                         print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
                     else:
                         row['options']+=" NULL"
-                
+            else:
+                if row['type']=='serial':
+                    print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
+                else:
+                    row['options']+=" NULL"
+                            
             if hasattr(field,"pk"):
                 if str(field.pk)=='true':
                     if mode=="create":
@@ -213,13 +222,18 @@ def create_table(db,table,mtd,existent_fields=[]):
     
     if mode=="create":
         txtfields+=constraints
-        txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS; %s" % (table, ",\n".join(txtfields), "\n".join(indexes))
+        txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS;" % (table, ",\n".join(txtfields))
         try:
             db.query(txtcreate)
         except:
             print txtcreate
             raise            
-    
+        for index in indexes:
+            try:
+                db.query(index)
+            except:
+                pass
+                
         
         
         
@@ -249,17 +263,47 @@ def load_mtd(options,db,table,mtd_parse):
             print "Creando tabla '%s' ..." % table
         create_table(db,table,mtd)
     else:
+        Regenerar=False
         
         for field in mtd.field:
             name=str(field.name)
             if not tablefields.has_key(name):
                 print "ERROR: La columna '%s' no existe en la tabla '%s'" % (name,table)
+                Regenerar=True
             #print "*****"
             #for atr in dir(field):
             #    if (atr[0]!='_'):
-            #        print "%s : '%s'" % (atr,getattr(field,atr))
+            #        prin create_table(db,table,mtd)t "%s : '%s'" % (atr,getattr(field,atr))
             
-
+        
+        if Regenerar:
+            data=export_table(options,db,table)
+            db.query("DROP TABLE %s" % table)
+            create_table(db,table,mtd)
+            import_table(options,db,table,data,mparser.field)
+            
+            try:
+                for pkey in mparser.primary_key:
+                    tfield=mparser.field[pkey]
+                    if tfield.dtype=='serial':
+                        qry_serial=db.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
+                        dr_serial=qry_serial.dictresult()
+                        for dserial in dr_serial:
+                            serial=dserial['serial']
+                            qry_maxserial=db.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
+                            max_serial=1
+                            dr_maxserial=qry_maxserial.dictresult()
+                            for dmaxserial in dr_maxserial:
+                                if dmaxserial['max']:
+                                    max_serial=dmaxserial['max']+1
+                            
+                            db.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
+            except:
+                print "PKeys: %s" % mparser.primary_key
+                raise                                
+                
+        
+        
 # Comprobar Primary Keys en una tabla:
 # SELECT * FROM information_schema.constraint_table_usage WHERE table_name='articulos'
 # SELECT * FROM information_schema.key_column_usage
@@ -278,3 +322,45 @@ def load_mtd(options,db,table,mtd_parse):
 # SELECT pg_get_indexdef(indexrelid) FROM pg_catalog.pg_index WHERE indrelid = 'clientes'::regclass;
 # 
 
+# REINICIAR LOS CONTADORES!!!
+
+# ALTER SEQUENCE tallasset_id_seq
+#   RESTART WITH 8;
+        
+
+def export_table(options,db,table):
+
+    qry= db.query("SELECT * FROM %s" % table)
+    filas=qry.dictresult() 
+    return filas
+
+
+    
+    
+    
+def import_table(options,db,table,data,nfields):  
+    if not len(data):
+        return 
+    print "Insertando %d filas en %s ..." % (len(data), table)     
+    for fila in data:
+        fields=[]
+        values=[]
+        sqlvar={}
+        for key in fila:
+            if nfields.has_key(key):
+                campo=fila[key]
+                fields+=[key]
+                if (campo is not None):#Si el valor es nulo
+                    values.append("'" + pg.escape_string(str(campo)) + "'")
+                else:
+                    values.append("NULL")
+            
+        sqlvar['tabla']=table
+        sqlvar['fields']=", ".join(fields)
+        sqlvar['values']=", ".join(values)
+        try:
+            sql_text="INSERT INTO %(tabla)s (%(fields)s) VALUES(%(values)s);" % sqlvar
+            db.query(sql_text)
+        except:
+            print sql_text
+            raise
