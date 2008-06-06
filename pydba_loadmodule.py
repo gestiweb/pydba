@@ -2,9 +2,11 @@
 #     encoding: UTF8
 
 # Fichero de carga de módulos para PyDBa
-import pg             # depends - python-pygresql
-import _mysql     # depends - python-mysqldb
-import os             # permite la función "walk"
+import pg               # depends - python-pygresql
+import _mysql           # depends - python-mysqldb
+import os               # permite la función "walk"
+from stat import *      # definiciones para Stat
+import time             # saber la hora actual
 
 from exmlparser import XMLParser
 from pydba_utils import *
@@ -68,6 +70,13 @@ def load_module(options,db=None):
     return db
     
     
+def touch(file):
+    time_r=time.time()
+    f1=open(file,"w")
+    f1.write(str(time_r))
+    f1.close()    
+    
+    
 def load_module_loadone(options,modpath,db):
     module=""
     tables=[]
@@ -76,8 +85,17 @@ def load_module_loadone(options,modpath,db):
     unicode_filetypes=["ui","ts"]
     
     files=[]
+    # time_reference=time.time()-60*60*24
+    time_reference = 0
+    try:
+        time_reference = os.stat(os.path.join(modpath, ".pydba.loaded"))[ST_MTIME]
+    except:
+        time_reference = 0
+    touch(os.path.join(modpath, ".pydba.loaded"))
+    
     for root, dirs, walk_files in os.walk(modpath):
             for name in walk_files:
+                mtime = os.stat(os.path.join(root, name))[ST_MTIME]
                 if f_ext(name)=="mod":
                     module=name[:-4]
                     file_module=loadfile_inutf8(root, name)
@@ -92,6 +110,10 @@ def load_module_loadone(options,modpath,db):
                         'icon' :        str(module_parse.root.module.icon),
                         }
                     d_module['icon_data']=loadfile_inutf8(root, d_module['icon'])
+                
+                if not options.full and mtime<time_reference:
+                    continue
+                
                 if f_ext(name)=="mtd":
                     table=name[:-4]
                     # print "### Table: " + table
@@ -117,6 +139,7 @@ def load_module_loadone(options,modpath,db):
                     else:
                         options.modules_loaded[name]=file
                         files+=[file]
+    
     
     qry_areas=db.query("SELECT descripcion, bloqueo, idarea"
                                                 " FROM flareas WHERE idarea='%s'" % d_module['area'])
@@ -158,7 +181,7 @@ def load_module_loadone(options,modpath,db):
         print "Error when trying to update the module '%s': non-loaded or locked module" % module
         return 0
     
-    qry_modulos=db.query("SELECT * FROM flfiles WHERE idmodulo='%s'" % module);
+    qry_modulos=db.query("SELECT nombre,sha FROM flfiles WHERE idmodulo='%s' " % (module));
     tuplas_modulos=qry_modulos.dictresult() 
     dmodulos={}
     for modulo in tuplas_modulos:
@@ -186,7 +209,6 @@ def load_module_loadone(options,modpath,db):
             sql=("INSERT INTO flfiles (contenido, bloqueo, sha, idmodulo, nombre) "    
                     "VALUES('%(contents)s', 't', '%(sha)s','%(module)s', '%(name)s')" % file)
             db.query(sql)
-    
     
     
     
