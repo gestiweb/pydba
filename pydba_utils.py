@@ -13,6 +13,26 @@ def f_ext(filename):
     numsplits=len(name_s)
     return name_s[numsplits-1]
 
+def copy_escapechars(text):
+    if text is None: return "\\N"
+    if text is True: return "t"
+    if text is False: return "f"
+        
+    text=str(text)
+    transstr={
+        "\b": "\\b",
+        "\f": "\\f",
+        "\n": "\\n",
+        "\r": "\\r",
+        "\t": "\\t",
+        "\v": "\\v",
+        "\\": "\\\\"}
+
+    for key,val in transstr.iteritems():
+        text=text.replace(key,val)
+    
+    return text
+    
 # Cargar un fichero en ASCII codificado como UTF8
 def loadfile_inutf8(root, name):
     f1=open(os.path.join(root, name),"r")

@@ -21,20 +21,19 @@ def repair_db(options,db=None,mode=0):
         db=dbconnect(options)
         if (not db): 
             return 0
-    
+        
+    where=""
+    if not options.full :
+        where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
+        
     if (options.verbose):
         print "Inicializando reparación de la base de datos '%s'..." % options.ddb
         print " * Calcular firmas SHA1 de files y metadata"
     
     
-    if (options.full):
-        qry_modulos=db.query("SELECT idmodulo, nombre, contenido, sha "
-                        "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd'"
-                        " ORDER BY idmodulo, nombre");
-    else:
-        qry_modulos=db.query("SELECT idmodulo, nombre, sha "
-                        "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd'"
-                        " ORDER BY idmodulo, nombre");
+    qry_modulos=db.query("SELECT idmodulo, nombre, contenido, sha " +
+                    "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' "
+                    + where + " ORDER BY idmodulo, nombre");
                                 
     modulos=qry_modulos.dictresult() 
     sql=""
@@ -42,7 +41,7 @@ def repair_db(options,db=None,mode=0):
     xmlfiles=("xml","ui","qry","kut","mtd","ts")
     for modulo in modulos:
         xml=None
-        if modulo.has_key('contenido'):
+        if options.full and modulo.has_key('contenido'):
             sha1=SHA1(modulo['contenido'])
         else:            
             sha1=modulo['sha']
@@ -51,7 +50,7 @@ def repair_db(options,db=None,mode=0):
             print "ERROR: Carácteres no ISO en %s.%s (se omite SHA1)" % (modulo['idmodulo'],modulo['nombre'])
             sha1=modulo['sha']
         
-        if f_ext(modulo['nombre']) in xmlfiles and options.full:
+        if f_ext(modulo['nombre']) in xmlfiles:
             xml=XMLParser()
             xml.parseText(modulo['contenido'])
             if xml.root==None:

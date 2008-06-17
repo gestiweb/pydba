@@ -7,6 +7,7 @@ import _mysql           # depends - python-mysqldb
 import os               # permite la función "walk"
 from stat import *      # definiciones para Stat
 import time             # saber la hora actual
+import shelve           # persistencia de datos; especial para recordar SHA1
 
 from exmlparser import XMLParser
 from pydba_utils import *
@@ -67,6 +68,8 @@ def load_module(options,db=None):
     for module in modules:
         load_module_loadone(options,module,db)
     
+    if (not options.quiet):
+        print "* done"
     return db
     
     
@@ -85,17 +88,18 @@ def load_module_loadone(options,modpath,db):
     unicode_filetypes=["ui","ts"]
     
     files=[]
-    # time_reference=time.time()-60*60*24
-    time_reference = 0
-    try:
-        time_reference = os.stat(os.path.join(modpath, ".pydba.loaded"))[ST_MTIME]
-    except:
-        time_reference = 0
-    touch(os.path.join(modpath, ".pydba.loaded"))
-    
+    pd = shelve.open("/tmp/pydba") # open -- file may get suffix added by low-level lib
+                          
+
     for root, dirs, walk_files in os.walk(modpath):
             for name in walk_files:
-                mtime = os.stat(os.path.join(root, name))[ST_MTIME]
+                fname = os.path.join(root, name)
+                mtime = os.stat(fname)[ST_MTIME]
+                loadFile = True
+                if pd.has_key(fname):
+                    if pd[fname]["mtime"]==mtime:
+                        loadFile=False
+                
                 if f_ext(name)=="mod":
                     module=name[:-4]
                     file_module=loadfile_inutf8(root, name)
@@ -109,28 +113,33 @@ def load_module_loadone(options,modpath,db):
                         'version' :        str(module_parse.root.module.version),
                         'icon' :        str(module_parse.root.module.icon),
                         }
-                    d_module['icon_data']=loadfile_inutf8(root, d_module['icon'])
+                    if loadFile:
+                        d_module['icon_data']=loadfile_inutf8(root, d_module['icon'])
                 
-                if not options.full and mtime<time_reference:
-                    continue
+                contents=""
+                if f_ext(name) in filetypes:
+                    contents_1=loadfile_inutf8(root,name)
+                    contents=pg.escape_string(contents_1)
+                    if loadFile:                    
+                        sha=SHA1(contents_1)
+                        pd[fname]={"mtime":mtime, "sha":sha, 'root' : root,'name' : name}
+                        
+                
                 
                 if f_ext(name)=="mtd":
                     table=name[:-4]
                     # print "### Table: " + table
                     tables+=[table]
-                    mtd_files[table]=loadfile_inutf8(root, name)
+                    mtd_files[table]=contents_1
                     
                         
                     
                 
-                if f_ext(name) in filetypes:
-                    
-                    contents=loadfile_inutf8(root,name)
-                    sha=SHA1(contents)
-                    contents=pg.escape_string(contents)
-                    
-                    
-                    file={'name' : name,'sha': sha, 'contents' : contents, 'root' : root}
+                if contents and f_ext(name) in filetypes:
+                    file={}
+                    for key,val in pd[fname].iteritems():
+                        file[key]=val
+                    file["contents"]=contents
                     if (options.modules_loaded.has_key(name)):
                         print "ERROR: %s file was already loaded." % name
                         print "--> this file was found at %s" % root
@@ -140,7 +149,9 @@ def load_module_loadone(options,modpath,db):
                         options.modules_loaded[name]=file
                         files+=[file]
     
-    
+    pd.close()
+    os.chmod("/tmp/pydba", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
+
     qry_areas=db.query("SELECT descripcion, bloqueo, idarea"
                                                 " FROM flareas WHERE idarea='%s'" % d_module['area'])
     tareas=qry_areas.dictresult()                        
@@ -216,5 +227,5 @@ def load_module_loadone(options,modpath,db):
         print "Module %s: loaded %d of %d files. (%s...)" % (module, len(loaded), len(files),",".join(loaded[:3]))
             
 
-
+    options.files_loaded+=loaded
 

@@ -23,7 +23,8 @@ def main():
                         verbose=False,
                         debug=False,
                         full=False,
-												rebuildtables=False,
+                        rebuildtables=False,
+                        files_loaded=[],
                         )
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -43,6 +44,9 @@ def main():
     g_action = optparse.OptionGroup(parser, "Actions","You MUST provide one of :")
     
     # ******************* ACTIONS
+    g_action.add_option("-T","--TEST", action="store_const", const="test_pydba"
+        ,dest="action", help="Do some checks on PyDBA")
+    
     g_action.add_option("-l","--lmod", action="store_const", const="load_module"
         ,dest="action", help="load modules")
         
@@ -98,6 +102,16 @@ def main():
         db=create_db(options);
         load_module(options,db)
         repair_db(options,db)
+    elif (options.action=="test_pydba"):
+        from pydba_mtdparser import export_table,create_table,import_table
+        from pydba_utils import dbconnect
+        
+        db=dbconnect(options)
+        if not db: return
+        data=export_table(options,db,"pedidoscli")
+        db.query("DELETE FROM %s" % "pedidoscli_aux")
+        import_table(options,db,"pedidoscli_aux",data,data[0])
+        
     else:
         print "Unknown action: " + options.action;
     

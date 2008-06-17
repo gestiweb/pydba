@@ -4,7 +4,8 @@
 # Fichero de parser de MTD y carga de tablas para PyDBa
 import pg             # depends - python-pygresql
 import _mysql     # depends - python-mysqldb
- 
+import traceback
+
 from pydba_utils import *
 
 class MTDParser_data:
@@ -190,9 +191,21 @@ def create_table(db,table,mtd,existent_fields=[]):
                 else:
                     row['options']+=" NULL"
                             
+            if row['type']=='character varying':
+                index_adds="text_pattern_ops"
+            else:                    
+                index_adds=""
+            
             if hasattr(field,"pk"):
                 if str(field.pk)=='true':
                     if mode=="create":
+                        
+                        indexes+=["CREATE INDEX %s_%s_m1_idx" 
+                                " ON %s USING btree (%s %s);" 
+                                % (table,row['name'],table,row['name'],index_adds)]
+                        indexes+=["CREATE INDEX %s_%sup_m1_idx" 
+                                " ON %s USING btree (upper(%s::text) %s);" 
+                                    % (table,row['name'],table,row['name'],index_adds)]
                         constraints+=["CONSTRAINT %s_pkey PRIMARY KEY (%s)" % (table,row['name'])]
                     else:
                         print("ERROR: Cannot alter table to add '%s' as a primary key!."
@@ -203,17 +216,12 @@ def create_table(db,table,mtd,existent_fields=[]):
                     if hasattr(relation,"card"):
                         if str(relation.card)=='M1' and index_loaded==False:
                             index_loaded=True
-                            if row['type']=='character varying':
-                                indexes+=["CREATE INDEX %s_%s_m1_idx" 
-                                        " ON %s USING btree (%s text_pattern_ops);" 
-                                        % (table,row['name'],table,row['name'])]
-                                indexes+=["CREATE INDEX %s_%sup_m1_idx" 
-                                        " ON %s USING btree (upper(%s::text) text_pattern_ops);" 
-                                            % (table,row['name'],table,row['name'])]
-                            else:
-                                indexes+=["CREATE INDEX %s_%s_m1_idx" 
-                                          " ON %s USING btree (%s);" 
-                                          % (table,row['name'],table,row['name'])]
+                            indexes+=["CREATE INDEX %s_%s_m1_idx" 
+                                    " ON %s USING btree (%s %s);" 
+                                    % (table,row['name'],table,row['name'],index_adds)]
+                            indexes+=["CREATE INDEX %s_%sup_m1_idx" 
+                                    " ON %s USING btree (upper(%s::text) %s);" 
+                                        % (table,row['name'],table,row['name'],index_adds)]
                     else:
                         print("WARNING: %s.%s has one relation without "
                                 "'card' tag" % (table,row['name']))
@@ -223,16 +231,34 @@ def create_table(db,table,mtd,existent_fields=[]):
     if mode=="create":
         txtfields+=constraints
         txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS;" % (table, ",\n".join(txtfields))
+        
+        
         try:
             db.query(txtcreate)
         except:
             print txtcreate
             raise            
+        
         for index in indexes:
             try:
+                split_index=index.split(" ")
+                index_name=split_index[2]
+                # Borrar primero el índice si existe
+                qry_indexes = db.query("""
+        SELECT pc2.relname as indice
+        FROM pg_class pc2 
+        WHERE pc2.relname = '%s'
+                """ % index_name)
+                dt_indexes=qry_indexes.dictresult() 
+                for fila in dt_indexes:
+                    db.query("DROP INDEX %s;" % fila['indice'])
+                
                 db.query(index)
             except:
-                pass
+                print index
+                import sys
+                traceback.print_exc(file=sys.stdout)
+    
                 
         
         
@@ -277,6 +303,19 @@ def load_mtd(options,db,table,mtd_parse):
             
         
         if Regenerar:
+            # Borrar primero los índices (todos) que tiene la tabla:
+            qry_indexes = db.query("""
+    SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
+    FROM pg_class pc 
+    INNER JOIN pg_index pi ON pc.oid=pi.indrelid 
+    INNER JOIN pg_class pc2 ON pi.indexrelid=pc2.oid
+    WHERE NOT pi.indisprimary AND NOT pi.indisunique
+    AND pc.relname = '%s'
+            """ % table)
+            dt_indexes=qry_indexes.dictresult() 
+            for fila in dt_indexes:
+                db.query("DROP INDEX %s;" % fila['indice'])
+            
             data=export_table(options,db,table)
             db.query("DROP TABLE %s" % table)
             create_table(db,table,mtd)
@@ -331,8 +370,9 @@ def load_mtd(options,db,table,mtd_parse):
 
 def export_table(options,db,table):
 
-    qry= db.query("SELECT * FROM %s" % table)
-    filas=qry.dictresult() 
+    qry = db.query("SELECT * FROM %s" % table)
+    filas = qry.dictresult() 
+    
     return filas
 
 
@@ -342,15 +382,22 @@ def export_table(options,db,table):
 def import_table(options,db,table,data,nfields):  
     if not len(data):
         return 
-    print "Insertando %d filas en %s ..." % (len(data), table)     
+    
+    if len(data)>1000:
+        print "Insertando %d filas en %s ... " % (len(data), table)
+    sqlarray=[]
+    error=False
+    
     for fila in data:
         fields=[]
         values=[]
+        copy_values=[]
         sqlvar={}
         for key in fila:
             if nfields.has_key(key):
                 campo=fila[key]
                 fields+=[key]
+                copy_values.append(copy_escapechars(campo))
                 if (campo is not None):#Si el valor es nulo
                     values.append("'" + pg.escape_string(str(campo)) + "'")
                 else:
@@ -359,9 +406,26 @@ def import_table(options,db,table,data,nfields):
         sqlvar['tabla']=table
         sqlvar['fields']=", ".join(fields)
         sqlvar['values']=", ".join(values)
-        try:
-            sql_text="INSERT INTO %(tabla)s (%(fields)s) VALUES(%(values)s);" % sqlvar
-            db.query(sql_text)
-        except:
-            print sql_text
-            raise
+        sqlarray+=["\t".join(copy_values)]
+        
+        if len(sqlarray)>2048:
+            sql_text="COPY %(tabla)s (%(fields)s) FROM stdin;" % sqlvar
+            db.query(sql_text )
+            for line in sqlarray:
+                db.putline(line+"\n")
+            db.putline("\\."+"\n")
+            db.endcopy()
+            sqlarray=[]
+            
+
+    sql_text="COPY %(tabla)s (%(fields)s) FROM stdin;" % sqlvar
+    db.query(sql_text )
+    for line in sqlarray:
+        db.putline(line+"\n")
+    db.putline("\\."+"\n")
+    db.endcopy()
+    sqlarray=[]
+    
+    if len(data)>1000:
+        print "* hecho"
+
