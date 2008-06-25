@@ -150,7 +150,10 @@ def load_module_loadone(options,modpath,db):
                         files+=[file]
     
     pd.close()
-    os.chmod("/tmp/pydba", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
+    try:
+        os.chmod("/tmp/pydba", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
+    except:
+        pass
 
     qry_areas=db.query("SELECT descripcion, bloqueo, idarea"
                                                 " FROM flareas WHERE idarea='%s'" % d_module['area'])
