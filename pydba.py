@@ -6,7 +6,7 @@ from pydba_loadmodule import load_module
 from pydba_repairdb import repair_db
 from pydba_createdb import create_db
 
-    
+import os 		# variables entorno
 
 def main():
 
@@ -76,8 +76,16 @@ def main():
     g_options.add_option("--ddb",dest="ddb", help="Set DDB as destination Database")
     g_options.add_option("--duser",dest="duser", help="Provide user for DB connection")
     g_options.add_option("--dpasswd",dest="dpasswd", help="Provide password for DB connection")
-    g_options.add_option("--loaddir",dest="loaddir", help="Select Working Directory for Modules")
     
+    g_options.add_option("--ohost",dest="ohost", help="Set the origin host")
+    g_options.add_option("--oport",dest="oport", help="Set the origin port")
+    g_options.add_option("--odriver",dest="odriver", help="Set the driver for origin DB (mysql; pgsql)")
+    g_options.add_option("--odb",dest="odb", help="Set DDB as origin Database")
+    g_options.add_option("--ouser",dest="ouser", help="Provide user for origin DB connection")
+    g_options.add_option("--opasswd",dest="opasswd", help="Provide password for origin DB connection")
+    
+    g_options.add_option("--loaddir",dest="loaddir", help="Select Working Directory for Modules")
+
     parser.add_option_group(g_options)  
     
     
@@ -88,7 +96,27 @@ def main():
     #                  action="store_false", dest="verbose", default=True,
     #                  help="don't print status messages to stdout")
     
+    for param in os.environ.keys():
+        if param[:5]=="PYDBA":
+          value=os.environ[param]
+          if param=="PYDBA_DHOST":
+            parser.set_defaults(dhost=value)
+          elif param=="PYDBA_DUSER":
+            parser.set_defaults(duser=value)
+          elif param=="PYDBA_DPASSWD":
+            parser.set_defaults(dpasswd=value)
+          elif param=="PYDBA_DPORT":
+            parser.set_defaults(dport=value)
+          else:
+            print "Unknown env var: %20s %s" % (param,value)    
+
     (options, args) = parser.parse_args()
+    
+    if options.dhost and not options.ohost: options.ohost=options.dhost
+    if options.duser and not options.ouser: options.ouser=options.duser
+    if options.dpasswd and not options.opasswd: options.opasswd=options.dpasswd
+    if options.ddb and not options.odb: options.odb=options.ddb
+    if options.dport and not options.oport: options.oport=options.dport
     
     if (options.action=="none"):
         print "You must provide at least one action"

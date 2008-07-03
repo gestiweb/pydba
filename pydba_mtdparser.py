@@ -35,9 +35,14 @@ class MTDParser:
         'date'      : 'date',
         'time'      : 'time',
     }
+    nonbasic_types= [ 'pixmap' ]
     
-    field={}
-    primary_key=[]
+    def __init__(self):
+        self.field={}
+        self.basic_fields=[]
+        self.nonbasic_fields=[]
+        self.primary_key=[]
+        
     def check_field_attrs(self,field,table):
         tfield=MTDParser_data()
         name=getattr(field,"name","noname")
@@ -119,7 +124,14 @@ class MTDParser:
                 
             
             
+        if not tfield.name.islower():
+            tfield.name+="_mtd_uppercased"
         
+        if str(field.type_) in self.nonbasic_types:
+            self.nonbasic_fields.append(tfield.name)
+        else:
+            self.basic_fields.append(tfield.name)
+            
         return tfield
         
     
@@ -264,7 +276,7 @@ def create_table(db,table,mtd,existent_fields=[]):
         
         
         
-def load_mtd(options,db,table,mtd_parse):
+def load_mtd(options,odb,ddb,table,mtd_parse):
     
     mtd=mtd_parse.root.tmd
     if table!=table.lower():
@@ -273,13 +285,28 @@ def load_mtd(options,db,table,mtd_parse):
     if str(mtd.name)!=table:
         print "WARNING: Expected '%s' in MTD name but found '%s' ***" % (table,str(mtd.name))
     
-    qry_columns=db.query("SELECT * from information_schema.columns"
+    qry_columns=ddb.query("SELECT * from information_schema.columns"
                 " WHERE table_schema = 'public' AND table_name='%s'" % table)
     #aux_columns
     tablefields={}
     aux_columns=qry_columns.dictresult()
     for column in aux_columns:
+        if not column['column_name'].islower():
+            column['column_name']+="_ddb_uppercased"
+        
         tablefields[column['column_name']]=column
+    
+    qry_columns2=odb.query("select table_name from information_schema.tables where table_schema='public' and table_type='BASE TABLE' and table_name='%s'" % table)
+    origin_tablefields=[]
+    if len(qry_columns2.dictresult())==1:
+        qry_columns2=odb.query("SELECT * from information_schema.columns"
+                    " WHERE table_schema = 'public' AND table_name='%s'" % table)
+        #aux_columns
+        aux_columns2=qry_columns2.dictresult()
+        for column in aux_columns2:
+            if not column['column_name'].islower():
+                column['column_name']+="_odb_uppercased"
+            origin_tablefields.append(column['column_name'])
     
     mparser=MTDParser()
     mparser.parse_mtd(mtd)
@@ -287,7 +314,7 @@ def load_mtd(options,db,table,mtd_parse):
     if len(tablefields)==0:
         if (options.debug):
             print "Creando tabla '%s' ..." % table
-        create_table(db,table,mtd)
+        create_table(ddb,table,mtd)
     else:
         Regenerar=options.rebuildtables
         
@@ -296,15 +323,73 @@ def load_mtd(options,db,table,mtd_parse):
             if not tablefields.has_key(name):
                 print "ERROR: La columna '%s' no existe en la tabla '%s'" % (name,table)
                 Regenerar=True
+            
+            
+        if len(origin_tablefields)>0:
+            for field in reversed(mparser.basic_fields):
+                name=field
+                if not name in origin_tablefields:
+                    print "ERROR: La base de datos de origien no tiene la columna '%s' en la tabla '%s'" % (name,table)
+                    try:
+                        mparser.basic_fields.remove(name)
+                    except:
+                        pass
+        else:
+            print "ERROR: La BD origien no tiene la tabla '%s'" % (table)
+            mparser.basic_fields=[]
             #print "*****"
             #for atr in dir(field):
             #    if (atr[0]!='_'):
             #        prin create_table(db,table,mtd)t "%s : '%s'" % (atr,getattr(field,atr))
             
         
+        if len(mparser.basic_fields)==0:
+            # Si no hay campos que pasar, generamos la tabla de cero.
+            Regenerar=True
+            
+        if not Regenerar and options.odb != options.ddb : # TODO: Aquí falta comparar también los puertos y IP's.
+            import sha
+            mparser.basic_fields.sort()
+            try:
+                origin_data=export_table(options,odb,table,mparser.basic_fields)
+            except:
+                print mparser.basic_fields
+                raise
+            origin_rows={}
+            dest_rows={}
+            origin_fields=mparser.basic_fields
+            if len(origin_data)>0: origin_fields=origin_data[0].keys()
+            
+            if len(mparser.primary_key)==1:
+                pkey=mparser.primary_key[0]
+            else:
+                print "ERROR: La tabla %s no tiene PK o tiene más de uno! " % table
+            origin_fields.sort()
+            for row in origin_data:
+                row_hash=sha.new(repr(row)).hexdigest()
+                row['#hash']=row_hash
+                origin_rows[row[pkey]]=row
+            
+            dest_data=export_table(options,ddb,table,origin_fields)
+            for row in dest_data:
+                row_hash=sha.new(repr(row)).hexdigest()
+                row['#hash']=row_hash
+                if origin_rows.has_key(row[pkey]):
+                    # Comprobar aquí el hash y si falla comprobar campo por campo.
+                    del origin_rows[row[pkey]]
+                else:
+                    dest_rows[row[pkey]]=row
+            
+            if len(origin_rows)==0 and len(dest_rows)==0 :
+              Regenerar=False
+            else:
+              Regenerar=True
+              print  table, len(origin_rows),len(dest_rows)
+           
+        
         if Regenerar:
             # Borrar primero los índices (todos) que tiene la tabla:
-            qry_indexes = db.query("""
+            qry_indexes = ddb.query("""
     SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
     FROM pg_class pc 
     INNER JOIN pg_index pi ON pc.oid=pi.indrelid 
@@ -314,30 +399,40 @@ def load_mtd(options,db,table,mtd_parse):
             """ % table)
             dt_indexes=qry_indexes.dictresult() 
             for fila in dt_indexes:
-                db.query("DROP INDEX %s;" % fila['indice'])
-            
-            data=export_table(options,db,table)
-            db.query("DROP TABLE %s" % table)
-            create_table(db,table,mtd)
-            import_table(options,db,table,data,mparser.field)
+                ddb.query("DROP INDEX %s;" % fila['indice'])
+            if len(mparser.basic_fields)>0:
+                data=export_table(options,odb,table)
+            else:
+                data=None
+            try:
+              ddb.query("DROP TABLE %s" % table)
+            except:
+              print "No se pudo borrar la tabla."
+            try:
+              create_table(ddb,table,mtd)
+              if data: import_table(options,ddb,table,data,mparser.field)
+            except:
+              print "ERROR: Se encontraron errores graves al importar la tabla %s" % table
+              
+              
             
         try:
             for pkey in mparser.primary_key:
                 tfield=mparser.field[pkey]
                 if tfield.dtype=='serial':
-                    qry_serial=db.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
+                    qry_serial=ddb.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
                     dr_serial=qry_serial.dictresult()
                     for dserial in dr_serial:
                         serial=dserial['serial']
                         if serial:
-                            qry_maxserial=db.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
+                            qry_maxserial=ddb.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
                             max_serial=1
                             dr_maxserial=qry_maxserial.dictresult()
                             for dmaxserial in dr_maxserial:
                                 if dmaxserial['max']:
                                     max_serial=dmaxserial['max']+1
         
-                            db.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
+                            ddb.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
         except:
             print "PKeys: %s" % mparser.primary_key
             raise
@@ -368,11 +463,15 @@ def load_mtd(options,db,table,mtd_parse):
 #   RESTART WITH 8;
         
 
-def export_table(options,db,table):
-
-    qry = db.query("SELECT * FROM %s" % table)
-    filas = qry.dictresult() 
-    
+def export_table(options,db,table, fields=['*']):
+    filas=None
+    try:
+        sql = "SELECT " + ",".join(fields) + " FROM %s" % table
+        qry = db.query(sql)
+        filas = qry.dictresult() 
+    except:
+        print sql
+        raise
     return filas
 
 
@@ -383,7 +482,7 @@ def import_table(options,db,table,data,nfields):
     if not len(data):
         return 
     
-    if len(data)>1000:
+    if len(data)>1:
         print "Insertando %d filas en %s ... " % (len(data), table)
     sqlarray=[]
     error=False

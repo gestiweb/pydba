@@ -107,3 +107,46 @@ def dbconnect(options):
     return cn
     
     
+
+def odbconnect(options):
+    if (not options.opasswd):
+        options.opasswd = raw_input("Password: ")
+    try:
+        if (options.odriver=='mysql'):
+            cn = _mysql.connect(
+                        db=options.odb, 
+                        port=int(options.oport),
+                        host=options.ohost, 
+                        user=options.ouser, 
+                        passwd=options.opasswd )
+            cn.set_character_set("UTF8") # Hacemos la codificación a UTF8.
+        # Si la conexión es a Postgres , de la siguiente manera            
+        else:
+            cn = pg.connect(
+                        dbname=options.odb, 
+                        port=int(options.oport),
+                        host=options.ohost, 
+                        user=options.ouser, 
+                        passwd=options.opasswd )  
+            cn.query("SET client_encoding = 'UTF8';")                
+    except:
+        print("Error trying to connect to *origin* database '%s' in host %s:%s" 
+                " using user '%s'" % (
+                        options.odb,
+                        options.ohost,
+                        options.oport,
+                        options.ouser,
+                        ))
+        return 0
+            
+    if options.debug: 
+        print("* Succesfully connected to *origin* database '%s' in host %s:%s" 
+                " using user '%s'" % (
+                        options.odb,
+                        options.ohost,
+                        options.oport,
+                        options.ouser,
+                        ))
+    return cn
+    
+    

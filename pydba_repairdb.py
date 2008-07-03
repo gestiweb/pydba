@@ -13,25 +13,79 @@ from exmlparser import XMLParser
 #    
     
     
-def repair_db(options,db=None,mode=0):
-    if (not db):
+def repair_db(options,ddb=None,mode=0,odb=None):
+    if (not ddb):
         if (not options.ddb):
-            print "RepairDB requiere una base de datos y no proporcionó ninguna."
+            print "RepairDB requiere una base de datos de destino y no proporcionó ninguna."
             return 0
-        db=dbconnect(options)
-        if (not db): 
+        ddb=dbconnect(options)
+        if (not ddb): 
+            return 0
+    
+    if (not odb):
+        if (not options.odb):
+            print "RepairDB requiere una base de datos de destino y no proporcionó ninguna."
+            return 0
+        odb=odbconnect(options)
+        if (not odb): 
             return 0
         
     where=""
     if not options.full :
-        where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
+        if len(options.files_loaded)>0:
+          where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
+        elif options.odb!=options.ddb:
+          where+=" AND nombre LIKE '%.mtd'"
         
     if (options.verbose):
         print "Inicializando reparación de la base de datos '%s'..." % options.ddb
         print " * Calcular firmas SHA1 de files y metadata"
     
     
-    qry_modulos=db.query("SELECT idmodulo, nombre, contenido, sha " +
+    qry_omodulos=odb.query("SELECT sha " +
+            "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' ORDER BY sha");
+    ofiles=[]
+    for row in qry_omodulos.dictresult():
+        ofiles.append(row['sha'])
+    
+    qry_dmodulos=ddb.query("SELECT sha " +
+            "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' ORDER BY sha");
+    dfiles=[]
+    for row in qry_dmodulos.dictresult():
+        if row['sha'] in ofiles:
+            ofiles.remove(row['sha'])
+        else:
+            dfiles.append(row['sha'])
+    
+    # Eliminar los ficheros sobrantes.
+    qry_dmodulos=ddb.query("DELETE FROM flfiles WHERE sha IN ('" + "','".join(dfiles) + "')")
+    
+    # Obtener los ficheros nuevos
+    qry_omodulos=odb.query("SELECT * FROM flfiles WHERE sha IN ('" + "','".join(ofiles) + "')")
+    
+    # Insertarlos en la nueva DB.
+    for row in qry_omodulos.dictresult():
+        fields=row.keys()
+        values=[]
+        for field in fields:
+            campo=row[field]
+            if (campo is not None):#Si el valor es nulo
+                values.append("'" + pg.escape_string(str(campo)) + "'")
+            else:
+                values.append("NULL")
+        try:
+            qry_dmodulos=ddb.query("DELETE FROM flfiles WHERE nombre ='" + row['nombre'] + "'")
+            
+            sql="INSERT INTO flfiles (" + ",".join(fields) + ") VALUES(" + ",".join(values) + ")"
+            ddb.query(sql)
+        except:
+            print sql
+            raise
+        
+        
+    
+    
+    qry_modulos=ddb.query("SELECT idmodulo, nombre, contenido, sha " +
                     "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' "
                     + where + " ORDER BY idmodulo, nombre");
                                 
@@ -67,7 +121,7 @@ def repair_db(options,db=None,mode=0):
         
         if (f_ext(modulo['nombre'])=="mtd"):
             tabla=modulo['nombre'][:-4]
-            qry_modulos=db.query("SELECT xml FROM flmetadata WHERE tabla='%s'" % tabla);
+            qry_modulos=ddb.query("SELECT xml FROM flmetadata WHERE tabla='%s'" % tabla);
             tablas=qry_modulos.dictresult() 
             TablaCargada=False
             for txml in tablas:
@@ -80,17 +134,17 @@ def repair_db(options,db=None,mode=0):
                     sql+=("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
                         " VALUES('%s','f','0','%s');\n" % (tabla,sha1))
             if xml:
-                load_mtd(options,db,tabla,xml)
+                load_mtd(options,odb,ddb,tabla,xml)
                 
         if (len(sql)>1024):
-            db.query(sql)
+            ddb.query(sql)
             sql=""
     
     if (len(sql)>0):    
-        db.query(sql)
+        ddb.query(sql)
         sql=""
     
-    qry_serial=db.query("SELECT sha FROM flserial");
+    qry_serial=ddb.query("SELECT sha FROM flserial");
     serials=qry_serial.dictresult() 
     for serial in serials:
         if (serial['sha']==resha1):
@@ -98,18 +152,9 @@ def repair_db(options,db=None,mode=0):
                 
     if (resha1):
         if len(serials)>0:
-            db.query("UPDATE flserial SET sha='%s';" % (resha1))
+            ddb.query("UPDATE flserial SET sha='%s';" % (resha1))
             print "Updated flserial => %s." % (resha1)     
         else:        
-            db.query("INSERT INTO flserial (serie,sha) VALUES(1,'%s')" % (resha1))
+            ddb.query("INSERT INTO flserial (serie,sha) VALUES(1,'%s')" % (resha1))
             print "Created flserial => %s." % (resha1)     
     
-    
-    # **************** COSAS QUE FALTAN POR REPARAR ********************
-    
-    # Reparar Secuencias de PostgreSQL, comprobar último número
-    # Reparar Secuencias de AbanQ Contabilidad
-    # Reparar Secuencias de AbanQ Facturacion
-    
-
-
