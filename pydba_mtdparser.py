@@ -519,14 +519,14 @@ def import_table(options,db,table,data,nfields):
                             copy_values.append("0")
                         elif _field.dtype in ["character varying","text"]:
                             values.append("''")
-                            copy_values.append("''")
+                            copy_values.append("")
                         elif _field.dtype in ["date","time","datetime"]:
                             values.append("'1990-01-01 23:50:50'")
-                            copy_values.append("'1990-01-01 23:50:50'")
+                            copy_values.append("1990-01-01 23:50:50")
                         else:
                             print "NO SE RECONOCE EL TIPO: %s " %  _field.dtype
                             values.append("'0'")
-                            copy_values.append("'0'")
+                            copy_values.append("0")
                             
             
         sqlvar['tabla']=table
