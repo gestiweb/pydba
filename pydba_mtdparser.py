@@ -487,20 +487,47 @@ def import_table(options,db,table,data,nfields):
     sqlarray=[]
     error=False
     
+    total_fields=set(nfields.keys())
+    selected_fields=set(data[0].keys())
+    fields_toadd=total_fields-selected_fields
+    
+    
     for fila in data:
         fields=[]
         values=[]
         copy_values=[]
         sqlvar={}
+        for field in fields_toadd:
+            fila[field]=None
         for key in fila:
             if nfields.has_key(key):
+                _field=nfields[key]
                 campo=fila[key]
                 fields+=[key]
-                copy_values.append(copy_escapechars(campo))
-                if (campo is not None):#Si el valor es nulo
+                if (campo is not None):#Si el valor NO es nulo
                     values.append("'" + pg.escape_string(str(campo)) + "'")
+                    copy_values.append(copy_escapechars(campo))
                 else:
-                    values.append("NULL")
+                    # ¿Permite null este campo o es Serial?
+                    if _field.null==True or _field.dtype == 'serial': 
+                        values.append("NULL")
+                        copy_values.append("NULL")
+                    else:
+                        # Si no, vamos a los valores por defecto.
+                        if _field.dtype in ["integer","double precision","smallint","boolean","bool"]:
+                            values.append("'0'")
+                            copy_values.append("0")
+                        elif _field.dtype in ["character varying","text"]:
+                            values.append("''")
+                            copy_values.append("''")
+                        elif _field.dtype in ["date","time","datetime"]:
+                            values.append("'1990-01-01 23:50:50'")
+                            copy_values.append("'1990-01-01 23:50:50'")
+                        else:
+                            print "NO SE RECONOCE EL TIPO: %s " %  _field.dtype
+                            values.append("'0'")
+                            copy_values.append("'0'")
+                            
             
         sqlvar['tabla']=table
         sqlvar['fields']=", ".join(fields)
