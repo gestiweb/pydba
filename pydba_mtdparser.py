@@ -107,6 +107,17 @@ class MTDParser:
             print "ERROR: Unknown field type '%s' in Field %s.%s." % (str(field.type_),table,name)
         else:
             tfield.dtype=self.typetr[str(field.type_)]
+        
+        
+        
+        if str(field.null)=='false':
+            tfield.null=False
+        elif str(field.null)=='true':
+            tfield.null=True
+        else:
+            tfield.null=True
+            print "ERROR: Unknown null '%s' in Field %s.%s." % (str(field.null),table,name)
+            
 
         if str(field.pk)=='false':
             tfield.pk=False
@@ -114,6 +125,7 @@ class MTDParser:
             tfield.pk=True
             self.primary_key+=[tfield.name]
         else:
+            tfield.pk=False
             print "ERROR: Unknown pk '%s' in Field %s.%s." % (str(field.pk),table,name)
         
         if tfield.dtype=='character varying':
@@ -375,8 +387,14 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 row_hash=sha.new(repr(row)).hexdigest()
                 row['#hash']=row_hash
                 if origin_rows.has_key(row[pkey]):
-                    # Comprobar aquí el hash y si falla comprobar campo por campo.
-                    del origin_rows[row[pkey]]
+                    if origin_rows[row[pkey]]['#hash']==row_hash:
+                        # Comprobar aquí el hash y si falla comprobar campo por campo.
+                        del origin_rows[row[pkey]]
+                    else:
+                        for field in origin_rows[row[pkey]]:
+                            value=origin_rows[row[pkey]][field]
+                            if value!=row[field]:
+                                print field,value,row[field]
                 else:
                     dest_rows[row[pkey]]=row
             
@@ -511,7 +529,7 @@ def import_table(options,db,table,data,nfields):
                     # ¿Permite null este campo o es Serial?
                     if _field.null==True or _field.dtype == 'serial': 
                         values.append("NULL")
-                        copy_values.append("NULL")
+                        copy_values.append("\\N")
                     else:
                         # Si no, vamos a los valores por defecto.
                         if _field.dtype in ["integer","double precision","smallint","boolean","bool"]:
