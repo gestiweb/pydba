@@ -33,9 +33,32 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     where=""
     if not options.full :
         if len(options.files_loaded)>0:
-          where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
-        elif options.odb!=options.ddb:
-          where+=" AND nombre LIKE '%.mtd'"
+            where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
+          
+        if len(options.modules)>0:
+            where+=" AND ( 0=1 "
+            for modname,module in options.modules.iteritems():
+                noloadtable=[]
+                loadtable=[]
+                for tablename, value in module.iteritems():
+                    if value==False:
+                        noloadtable.append(tablename + ".mtd")
+                    else:
+                        loadtable.append(tablename + ".mtd")
+                
+                try:
+                    default=module['_default_']
+                except:
+                    default=False
+                
+                if default==True:
+                    where+=" OR ( idmodulo = '%s' AND nombre NOT IN ('" % modname + "','".join(noloadtable) + "'))" 
+                else:
+                    where+=" OR ( idmodulo = '%s' AND nombre IN ('" % modname + "','".join(loadtable) + "'))" 
+            where+=")"
+                       
+        if options.odb!=options.ddb:
+            where+=" AND nombre LIKE '%.mtd'"
         
     if (options.verbose):
         print "Inicializando reparación de la base de datos '%s'..." % options.ddb
@@ -93,6 +116,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     sql=""
     resha1="";
     xmlfiles=("xml","ui","qry","kut","mtd","ts")
+    ficheros_actualizados=0
     for modulo in modulos:
         xml=None
         if options.full and modulo.has_key('contenido'):
@@ -114,6 +138,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         
         resha1=SHA1(resha1+sha1)
         if (modulo['sha']!=sha1):
+            ficheros_actualizados+=1
             print "Updating " + modulo['nombre'] + " => " + sha1 + " ..."
             sql+="UPDATE flfiles SET sha='%s' WHERE nombre='%s';\n" %    (sha1,modulo['nombre'])
         elif (options.debug):
@@ -151,7 +176,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             resha1=False
                 
     if (resha1):
-        if len(serials)>0:
+        if len(serials)>0 and ficheros_actualizados>0:
             ddb.query("UPDATE flserial SET sha='%s';" % (resha1))
             print "Updated flserial => %s." % (resha1)     
         else:        

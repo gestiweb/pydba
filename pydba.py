@@ -5,6 +5,7 @@ import optparse
 from pydba_loadmodule import load_module
 from pydba_repairdb import repair_db
 from pydba_createdb import create_db
+from pydba_execini import exec_ini
 
 import os 		# variables entorno
 
@@ -25,6 +26,7 @@ def main():
                         full=False,
                         rebuildtables=False,
                         files_loaded=[],
+                        modules={}
                         )
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -62,9 +64,6 @@ def main():
     g_action.add_option("-M","--mysql2pgsql", action="store_const", const="mysql_convert"
         ,dest="action", help="Convert MySQL Database to PostgreSQL")
                 
-    g_action.add_option("-i","--ini", action="store_const", const="exec_ini"
-        ,dest="action", help="load and execute INI file")
-                
     parser.add_option_group(g_action)  
     # ******************* CONFIG
     
@@ -86,6 +85,9 @@ def main():
     
     g_options.add_option("--loaddir",dest="loaddir", help="Select Working Directory for Modules")
 
+    
+    g_options.add_option("--loadini", dest="loadini", help="load and execute INI file")
+                
     parser.add_option_group(g_options)  
     
     
@@ -112,12 +114,16 @@ def main():
 
     (options, args) = parser.parse_args()
     
+    if options.loadini: 
+        exec_ini(options, options.loadini)
+     
     if options.dhost and not options.ohost: options.ohost=options.dhost
     if options.duser and not options.ouser: options.ouser=options.duser
     if options.dpasswd and not options.opasswd: options.opasswd=options.dpasswd
     if options.ddb and not options.odb: options.odb=options.ddb
     if options.dport and not options.oport: options.oport=options.dport
     
+   
     if (options.action=="none"):
         print "You must provide at least one action"
     
