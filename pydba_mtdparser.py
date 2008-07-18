@@ -359,7 +359,37 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             # Si no hay campos que pasar, generamos la tabla de cero.
             Regenerar=True
             
-        if not Regenerar and options.odb != options.ddb : # TODO: Aquí falta comparar también los puertos y IP's.
+           
+        if Regenerar:
+            # Borrar primero los índices (todos) que tiene la tabla:
+            qry_indexes = ddb.query("""
+    SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
+    FROM pg_class pc 
+    INNER JOIN pg_index pi ON pc.oid=pi.indrelid 
+    INNER JOIN pg_class pc2 ON pi.indexrelid=pc2.oid
+    WHERE NOT pi.indisprimary AND NOT pi.indisunique
+    AND pc.relname = '%s'
+            """ % table)
+            dt_indexes=qry_indexes.dictresult() 
+            for fila in dt_indexes:
+                ddb.query("DROP INDEX %s;" % fila['indice'])
+            if len(mparser.basic_fields)>0:
+                data=export_table(options,ddb,table)
+            else:
+                data=None
+            try:
+              ddb.query("DROP TABLE %s" % table)
+            except:
+              print "No se pudo borrar la tabla."
+            try:
+              create_table(ddb,table,mtd)
+              if data: import_table(options,ddb,table,data,mparser.field)
+            except:
+              print "ERROR: Se encontraron errores graves al importar la tabla %s" % table
+              
+              
+        # SINCRONIZACION MAESTRO>ESCLAVO      
+        if options.odb != options.ddb : # TODO: Aquí falta comparar también los puertos y IP's.
             import sha
             mparser.basic_fields.sort()
             try:
@@ -369,6 +399,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 raise
             origin_rows={}
             dest_rows={}
+            update_rows={}
             origin_fields=mparser.basic_fields
             if len(origin_data)>0: origin_fields=origin_data[0].keys()
             
@@ -391,47 +422,42 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                         # Comprobar aquí el hash y si falla comprobar campo por campo.
                         del origin_rows[row[pkey]]
                     else:
+                        update_rows[row[pkey]]={}
                         for field in origin_rows[row[pkey]]:
                             value=origin_rows[row[pkey]][field]
                             if value!=row[field]:
-                                print field,value,row[field]
+                                update_rows[row[pkey]][field]=value
+                                del origin_rows[row[pkey]]
+                                # print field,value,row[field]
                 else:
                     dest_rows[row[pkey]]=row
             
-            if len(origin_rows)==0 and len(dest_rows)==0 :
-              Regenerar=False
-            else:
-              Regenerar=True
-              print  table, len(origin_rows),len(dest_rows)
-           
-        
-        if Regenerar:
-            # Borrar primero los índices (todos) que tiene la tabla:
-            qry_indexes = ddb.query("""
-    SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
-    FROM pg_class pc 
-    INNER JOIN pg_index pi ON pc.oid=pi.indrelid 
-    INNER JOIN pg_class pc2 ON pi.indexrelid=pc2.oid
-    WHERE NOT pi.indisprimary AND NOT pi.indisunique
-    AND pc.relname = '%s'
-            """ % table)
-            dt_indexes=qry_indexes.dictresult() 
-            for fila in dt_indexes:
-                ddb.query("DROP INDEX %s;" % fila['indice'])
-            if len(mparser.basic_fields)>0:
-                data=export_table(options,odb,table)
-            else:
-                data=None
-            try:
-              ddb.query("DROP TABLE %s" % table)
-            except:
-              print "No se pudo borrar la tabla."
-            try:
-              create_table(ddb,table,mtd)
-              if data: import_table(options,ddb,table,data,mparser.field)
-            except:
-              print "ERROR: Se encontraron errores graves al importar la tabla %s" % table
-              
+            if len(origin_rows)>0 or len(dest_rows)>0 or len(update_rows)>0:
+                # Aplicar filtros aquí: ------
+                
+                # -----------------------------
+                
+                # Origin Row -> Insertar nueva fila;
+                for row in origin_rows:
+                    fields=[]
+                    values=[]
+                    for field,value in row.iteritems():
+                        fields.append(field)
+                        ivalue=sql_formatstring(value,mparser.field[field])
+                        values.append(ivalue)
+                    
+                    sql="INSERT INTO %s (%s) VALUES(%s)" % (table, ", ".join(fields), ", ".join(values))
+                    try:
+                        ddb.query(sql)
+                    except:
+                        print "Error al ejecutar la SQL: " + sql
+                        
+                
+                # Dest Row -> Borrar fila;
+                
+                # Update Rows -> Actualizar fila;
+                
+                print  table, len(origin_rows),len(dest_rows),len(update_rows)
               
             
         try:
@@ -495,6 +521,46 @@ def export_table(options,db,table, fields=['*']):
 
     
     
+def sql_formatstring(value,field,format='i'):
+    # Format:
+    #  i - fomrato inserción o update
+    #  c - formato COPY
+    
+    # Value:
+    #  Valor que queremos representar para la base de datos.
+    
+    # Field:
+    #  Una clase de parseo MTD donde indique el tipo de campo que es.
+    
+    ivalue=""
+    cvalue=""
+    if (value is not None):#Si el valor NO es nulo
+        ivalue="'" + pg.escape_string(str(value)) + "'"
+        cvalue=copy_escapechars(value)
+    else:
+        # ¿Permite null este campo o es Serial?
+        if field.null==True or field.dtype == 'serial': 
+            ivalue="NULL"
+            cvalue="\\N"
+        else:
+            # Si no, vamos a los valores por defecto.
+            if field.dtype in ["integer","double precision","smallint","boolean","bool"]:
+                ivalue="'0'"
+                cvalue="0"
+            elif field.dtype in ["character varying","text"]:
+                ivalue="''"
+                cvalue=""
+            elif field.dtype in ["date","time","datetime"]:
+                ivalue="'1990-01-01 23:50:50'"
+                cvalue="1990-01-01 23:50:50"
+            else:
+                print "NO SE RECONOCE EL TIPO: %s " %  field.dtype
+                ivalue="'0'"
+                cvalue="0"
+    
+    
+    if format=='i': return ivalue
+    if format=='c': return cvalue
     
 def import_table(options,db,table,data,nfields):  
     if not len(data):
@@ -522,29 +588,8 @@ def import_table(options,db,table,data,nfields):
                 _field=nfields[key]
                 campo=fila[key]
                 fields+=[key]
-                if (campo is not None):#Si el valor NO es nulo
-                    values.append("'" + pg.escape_string(str(campo)) + "'")
-                    copy_values.append(copy_escapechars(campo))
-                else:
-                    # ¿Permite null este campo o es Serial?
-                    if _field.null==True or _field.dtype == 'serial': 
-                        values.append("NULL")
-                        copy_values.append("\\N")
-                    else:
-                        # Si no, vamos a los valores por defecto.
-                        if _field.dtype in ["integer","double precision","smallint","boolean","bool"]:
-                            values.append("'0'")
-                            copy_values.append("0")
-                        elif _field.dtype in ["character varying","text"]:
-                            values.append("''")
-                            copy_values.append("")
-                        elif _field.dtype in ["date","time","datetime"]:
-                            values.append("'1990-01-01 23:50:50'")
-                            copy_values.append("1990-01-01 23:50:50")
-                        else:
-                            print "NO SE RECONOCE EL TIPO: %s " %  _field.dtype
-                            values.append("'0'")
-                            copy_values.append("0")
+                values.append(sql_formatstring(campo,nfields[key],'i'))
+                copy_values.append(sql_formatstring(campo,nfields[key],'c'))
                             
             
         sqlvar['tabla']=table
@@ -563,7 +608,7 @@ def import_table(options,db,table,data,nfields):
             
 
     sql_text="COPY %(tabla)s (%(fields)s) FROM stdin;" % sqlvar
-    db.query(sql_text )
+    db.query(sql_text)
     for line in sqlarray:
         db.putline(line+"\n")
     db.putline("\\."+"\n")
