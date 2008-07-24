@@ -418,17 +418,14 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 row_hash=sha.new(repr(row)).hexdigest()
                 row['#hash']=row_hash
                 if origin_rows.has_key(row[pkey]):
-                    if origin_rows[row[pkey]]['#hash']==row_hash:
-                        # Comprobar aquí el hash y si falla comprobar campo por campo.
-                        del origin_rows[row[pkey]]
-                    else:
+                    if origin_rows[row[pkey]]['#hash']!=row_hash:
                         update_rows[row[pkey]]={}
-                        for field in origin_rows[row[pkey]]:
-                            value=origin_rows[row[pkey]][field]
+                        for field,value in origin_rows[row[pkey]].iteritems():
+                            # value=origin_rows[row[pkey]][field]
                             if value!=row[field]:
                                 update_rows[row[pkey]][field]=value
-                                del origin_rows[row[pkey]]
-                                # print field,value,row[field]
+                
+                    del origin_rows[row[pkey]]
                 else:
                     dest_rows[row[pkey]]=row
             
@@ -438,24 +435,57 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 # -----------------------------
                 
                 # Origin Row -> Insertar nueva fila;
-                for row in origin_rows:
+                for pk,row in origin_rows.iteritems():
                     fields=[]
                     values=[]
-                    for field,value in row.iteritems():
-                        fields.append(field)
-                        ivalue=sql_formatstring(value,mparser.field[field])
-                        values.append(ivalue)
-                    
-                    sql="INSERT INTO %s (%s) VALUES(%s)" % (table, ", ".join(fields), ", ".join(values))
                     try:
-                        ddb.query(sql)
+                        for field,value in row.iteritems():
+                            if field[0]!='#':
+                                fields.append(field)
+                                ivalue=sql_formatstring(value,mparser.field[field])
+                                values.append(ivalue)
+                    
+                        sql="INSERT INTO %s (%s) VALUES(%s)" % (table, ", ".join(fields), ", ".join(values))
+                        try:
+                            ddb.query(sql)
+                        except:
+                            print "Error al ejecutar la SQL: " + sql
+                            raise
                     except:
-                        print "Error al ejecutar la SQL: " + sql
-                        
+                        print "Cannot insert: ", repr(row)
+                        raise
                 
                 # Dest Row -> Borrar fila;
+                for pk,row in dest_rows.iteritems():
+                    try:
+                        sql="DELETE FROM %s  WHERE %s = %s" % (table, pkey, sql_formatstring(pk,mparser.field[pkey]))
+                        try:
+                            ddb.query(sql)
+                        except:
+                            print "Error al ejecutar la SQL: " + sql
+                    except:
+                        print "Cannot delete: ",repr(row)
+                        raise
+                
                 
                 # Update Rows -> Actualizar fila;
+                for pk,row in update_rows.iteritems():
+                    values=[]
+                    try:
+                        for field,value in row.iteritems():
+                            if field[0]!='#':
+                                ivalue=sql_formatstring(value,mparser.field[field])
+                                values.append("%s = %s" % (field,ivalue))
+                    
+                        sql="UPDATE %s SET %s WHERE %s = %s" % (table, ", ".join(values), pkey, sql_formatstring(pk,mparser.field[pkey]))
+                        try:
+                            ddb.query(sql)
+                        except:
+                            print "Error al ejecutar la SQL: " + sql
+                    except:
+                        print "Cannot update: ",repr(row)
+                        raise
+                
                 
                 print  table, len(origin_rows),len(dest_rows),len(update_rows)
               

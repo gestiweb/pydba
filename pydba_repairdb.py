@@ -175,8 +175,8 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         if (serial['sha']==resha1):
             resha1=False
                 
-    if (resha1):
-        if len(serials)>0 and ficheros_actualizados>0:
+    if resha1 and ficheros_actualizados>0:
+        if len(serials)>0 :
             ddb.query("UPDATE flserial SET sha='%s';" % (resha1))
             print "Updated flserial => %s." % (resha1)     
         else:        
