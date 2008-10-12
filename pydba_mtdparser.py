@@ -8,6 +8,8 @@ import traceback
 
 from pydba_utils import *
 
+
+
 class MTDParser_data:
     name=""
     alias=""
@@ -42,10 +44,12 @@ class MTDParser:
         self.basic_fields=[]
         self.nonbasic_fields=[]
         self.primary_key=[]
+        self.child_tables=[]
         
     def check_field_attrs(self,field,table):
         tfield=MTDParser_data()
         name=getattr(field,"name","noname")
+        global Tables
         if not hasattr(field,"name"):
             field.name='no_name'
             print "ERROR: Field name ommitted in MTD %s.%s" % (table,name)
@@ -79,7 +83,8 @@ class MTDParser:
         
         if not hasattr(field,"null"):
             field.null='true'  # AbanQ permite omitir NULL.
-           
+        
+        
         if hasattr(field,"relation"):
             for relation in field.relation:
                 relation_is_ok=True
@@ -97,6 +102,8 @@ class MTDParser:
                         tfield.has_relations_1m=True
                     elif str(relation.card)=="M1":
                         tfield.has_relations_m1=True
+                        # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
+                        self.child_tables.append({"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) })
                     else:
                         print "ERROR: Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
                                         
@@ -150,6 +157,8 @@ class MTDParser:
     def parse_mtd(self,mtd):
         self.field={}
         self.primary_key=[]        
+        self.child_tables=[]        
+        self.name = mtd.name
         for field in mtd.field:
             tfield=self.check_field_attrs(field,mtd.name)
             self.field[tfield.name]=tfield
@@ -285,7 +294,7 @@ def create_table(db,table,mtd,existent_fields=[]):
     
                 
         
-        
+Tables={}        
         
         
 def load_mtd(options,odb,ddb,table,mtd_parse):
@@ -320,9 +329,11 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 column['column_name']+="_odb_uppercased"
             origin_tablefields.append(column['column_name'])
     
+    global Tables
     mparser=MTDParser()
     mparser.parse_mtd(mtd)
-        
+    Tables[table]=mparser
+    
     if len(tablefields)==0:
         if (options.debug):
             print "Creando tabla '%s' ..." % table
@@ -648,3 +659,106 @@ def import_table(options,db,table,data,nfields):
     if len(data)>1000:
         print "* hecho"
 
+def procesarOLAP():
+    global Tables
+    print "Inicio del proceso de tablas para OLAP."
+    primarykeys=[]
+    used_primarykeys=[]
+    relations=[]
+    fk_relations=[]
+    table_nr=[]
+    for tablename in Tables:
+        table = Tables[tablename]
+        for pk in table.primary_key:
+            primarykeys.append("%s.%s" % (tablename ,pk))
+        
+    for tablename in Tables:
+        table = Tables[tablename]
+        nrelations=0
+        for child_table in table.child_tables:
+            orig_fk="%s.%s" % (child_table['ntable'],child_table['nfield'])
+            dest_pk="%s.%s" % (child_table['table'],child_table['field'])
+
+            if  dest_pk in primarykeys:
+                primarykeys.remove(dest_pk)
+                used_primarykeys.append(dest_pk)
+            
+            if dest_pk in used_primarykeys:
+                relations.append("%s@%s" % (orig_fk,dest_pk))
+                nrelations+=1
+            else:
+                fk_relations.append("%s@%s" % (orig_fk,dest_pk))
+        if nrelations == 0:
+            for pk in table.primary_key:
+                table_nr.append("%s.%s" % (tablename ,pk))
+
+    primarykeys.sort()
+    used_primarykeys.sort()
+    relations.sort()
+    fk_relations.sort()
+    table_nr.sort()
+    
+    #for pk in primarykeys:
+     #   print "Tabla sin heredadas %s" % (pk)
+        
+    for table in table_nr:
+        if table in primarykeys:
+            table_nr.remove(table)
+        #else:
+         #   print "Tabla Padre %s" % table        
+    #for relation in fk_relations:
+    #    print "Imposible validar relación %s" % (relation)
+
+    print "%d Primary Key no usados." % len(primarykeys)
+    
+    print "%d Primary Key válidos." % len(used_primarykeys)
+    print "%d Relaciones usadas." % len(relations)
+    print "%d Relaciones no validadas." % len(fk_relations)
+    
+    seltable="lineasfacturascli"
+    print "___________________________________"
+    s,j=CalculateTable(Tables,seltable)
+    print "SELECT " 
+    print ", ".join(s)
+    print "\n\nFROM %s t" % seltable
+    print j
+    print "\n\n"
+    
+    
+
+def CalculateTable(Tables,tablename,asname="",tablehistory=[],maxdepth=1):
+    if asname=="":
+        asname="t"
+    table=Tables[tablename]
+    tablehistory+=[tablename]
+    joins = ""
+    select = []
+    axes = []
+    for child_table in table.child_tables:
+        axes.append(child_table['nfield'])
+
+    for field in table.basic_fields:
+        if not field in axes:
+            if len(select)==0:
+                add = "\n\n /** %s **/  " % ">".join(tablehistory)
+            else:
+                add = ""
+            select.append(add + "%s.%s as %s_%s" % (asname,field,asname,field,) )
+        
+    n=0
+    for child_table in table.child_tables:
+        if not child_table['table'] in tablehistory:
+            if maxdepth>0:
+                n+=1
+                child_table['asname']=asname + "_" + str(n) #child_table['nfield']
+                child_table['ntable']=asname 
+                
+                s,j = CalculateTable(Tables,child_table['table'],child_table['asname'],tablehistory[:],maxdepth-1)
+                joins += "\n" * maxdepth + "  " * (4-maxdepth) + "/** %d **/" % maxdepth+ " LEFT JOIN %(table)s %(asname)s ON %(ntable)s.%(nfield)s = %(asname)s.%(field)s" % (child_table)
+                joins += j
+                                    
+                select += s
+        
+        
+
+    return (select,joins)

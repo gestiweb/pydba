@@ -15,7 +15,7 @@ from pydba_utils import *
 #    *************************** LOAD MODULE *****
 #    
     
-def load_module(options,db=None):
+def load_module(options,db=None, preparse=False):
     if (not db):
         if (not options.ddb):
             print "LoadModule requiere una base de datos y no proporcionó ninguna."
@@ -66,7 +66,7 @@ def load_module(options,db=None):
         
     options.modules_loaded={}
     for module in modules:
-        load_module_loadone(options,module,db)
+        load_module_loadone(options,module,db,preparse)
     
     if (not options.quiet):
         print "* done"
@@ -80,7 +80,7 @@ def touch(file):
     f1.close()    
     
     
-def load_module_loadone(options,modpath,db):
+def load_module_loadone(options,modpath,db, preparse=False):
     module=""
     tables=[]
     mtd_files={}
@@ -131,7 +131,23 @@ def load_module_loadone(options,modpath,db):
                     # print "### Table: " + table
                     tables+=[table]
                     mtd_files[table]=contents_1
-                    
+                    if preparse:
+                        xml=XMLParser()
+                        xml.parseText(contents_1)
+                        if xml.root==None:
+                            print "ERROR: Failed to parse xml %s" %  (name)
+                            xml=None
+                        else:
+                            import pydba_mtdparser
+                            
+                            mtd=xml.root.tmd
+                            
+                            mparser=pydba_mtdparser.MTDParser()
+                            mparser.parse_mtd(mtd)
+                            pydba_mtdparser.Tables[table]=mparser
+                            
+                                
+
                         
                     
                 

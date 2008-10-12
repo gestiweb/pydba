@@ -3,6 +3,7 @@
 import optparse
 
 from pydba_loadmodule import load_module
+from pydba_mtdparser import procesarOLAP
 from pydba_repairdb import repair_db
 from pydba_createdb import create_db
 from pydba_execini import exec_ini
@@ -51,6 +52,9 @@ def main():
     
     g_action.add_option("-l","--lmod", action="store_const", const="load_module"
         ,dest="action", help="load modules")
+        
+    g_action.add_option("-O","--olap", action="store_const", const="setup_olap"
+        ,dest="action", help="setup olap tables")
         
     g_action.add_option("-r","--reload-mtd", action="store_const", const="reload_mtd"
         ,dest="action", help="Parses MTD files on DB and complete tables")
@@ -128,12 +132,16 @@ def main():
         print "You must provide at least one action"
     
     elif (options.action=="load_module"):
-        db=load_module(options);
+        db=load_module(options)
         repair_db(options,db)
+    elif (options.action=="setup_olap"):
+        db=load_module(options, preparse=True)
+        procesarOLAP()
+        
     elif (options.action=="repair_db"):
-        db=repair_db(options);
+        db=repair_db(options)
     elif (options.action=="create_db"):
-        db=create_db(options);
+        db=create_db(options)
         load_module(options,db)
         repair_db(options,db)
     elif (options.action=="test_pydba"):
