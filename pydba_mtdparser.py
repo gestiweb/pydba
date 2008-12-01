@@ -319,6 +319,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     
     qry_columns2=odb.query("select table_name from information_schema.tables where table_schema='public' and table_type='BASE TABLE' and table_name='%s'" % table)
     origin_tablefields=[]
+    
+    origin_fielddata={}
+    
     if len(qry_columns2.dictresult())==1:
         qry_columns2=odb.query("SELECT * from information_schema.columns"
                     " WHERE table_schema = 'public' AND table_name='%s'" % table)
@@ -328,6 +331,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             if not column['column_name'].islower():
                 column['column_name']+="_odb_uppercased"
             origin_tablefields.append(column['column_name'])
+            origin_fielddata[column['column_name']]=column
+            
     
     global Tables
     mparser=MTDParser()
@@ -344,9 +349,41 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         for field in mtd.field:
             name=str(field.name)
             if not tablefields.has_key(name):
-                print "ERROR: La columna '%s' no existe en la tabla '%s'" % (name,table)
+                print "warn: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
                 Regenerar=True
-            
+            else:
+              mfield = mparser.field[name]
+              
+              null=origin_fielddata[name]["is_nullable"]
+              if null=="YES": null=True
+              if null=="NO": null=False
+              
+              dtype=origin_fielddata[name]["data_type"]
+              mfielddtype = mfield.dtype
+              length=origin_fielddata[name]["character_maximum_length"]
+              if length == None: length = 0
+              if mfielddtype == "serial": mfielddtype = "integer"
+              if mfielddtype == "bool": mfielddtype = "boolean"
+              if dtype == "serial": dtype = "integer"
+              if dtype[:4] == "time": dtype = "time" 
+              
+              #print null, dtype, length
+              
+              if null != mfield.null and null == False: 
+                print "warn: La columna '%s' en la tabla '%s' ha establecido null de %s a %s" % (name,table,null,mfield.null)
+                Regenerar=True
+              
+              if dtype != mfielddtype: 
+                print "warn: La columna '%s' en la tabla '%s' ha cambiado el tipo de datos de %s a %s" % (name,table,dtype,mfielddtype)
+                Regenerar=True
+              
+              if length != mfield.length: 
+                print "warn: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
+                Regenerar=True
+              
+              
+              
+              #print origin_fielddata[name]
             
         if len(origin_tablefields)>0:
             for field in reversed(mparser.basic_fields):
