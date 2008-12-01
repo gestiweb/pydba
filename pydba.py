@@ -3,7 +3,7 @@
 import optparse
 
 from pydba_loadmodule import load_module
-from pydba_mtdparser import procesarOLAP
+from pydba_mtdparser import procesarOLAP, comprobarRelaciones
 from pydba_repairdb import repair_db
 from pydba_createdb import create_db
 from pydba_execini import exec_ini
@@ -65,6 +65,9 @@ def main():
     g_action.add_option("-C","--createdb", action="store_const", const="create_db"
         ,dest="action", help="Create a new Database with basic fl* tables")
     
+    g_action.add_option("-c","--check", action="store_const", const="check"
+        ,dest="action", help="Check relations for the DB")
+
     g_action.add_option("-M","--mysql2pgsql", action="store_const", const="mysql_convert"
         ,dest="action", help="Convert MySQL Database to PostgreSQL")
                 
@@ -137,7 +140,9 @@ def main():
     elif (options.action=="setup_olap"):
         db=load_module(options, preparse=True)
         procesarOLAP()
-        
+    elif (options.action=="check"):
+        db=load_module(options, preparse=True)
+        comprobarRelaciones()
     elif (options.action=="repair_db"):
         db=repair_db(options)
     elif (options.action=="create_db"):

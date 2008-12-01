@@ -659,6 +659,42 @@ def import_table(options,db,table,data,nfields):
     if len(data)>1000:
         print "* hecho"
 
+def comprobarRelaciones():
+    global Tables
+    print "Inicio de las comprobaciones de relaciones M1."
+    for tablename in Tables:
+        table = Tables[tablename]
+        for child_table in table.child_tables:
+            orig_fk="%s.%s" % (child_table['ntable'],child_table['nfield'])
+            dest_pk="%s.%s" % (child_table['table'],child_table['field'])
+            try:
+              ptable = Tables[child_table['table']]
+              fk = table.field[child_table['nfield']]
+              pk = ptable.field[child_table['field']]
+              error = False
+              pkdtype= pk.dtype
+              if pkdtype == "serial": pkdtype="integer"
+              # if fk.null != pk.null: error = True
+              if fk.dtype != pkdtype: error = True
+              if fk.length < pk.length: error = True
+              # if fk.pk == True: error = True
+              # if pk.pk == False: error = True
+                
+              
+              if error:
+                print "ERROR: Fallo al comprobar la relación %s -> %s" % (orig_fk,dest_pk)
+                # print "null:", fk.null, "|" , pk.null
+                print "dtype:", fk.dtype, "|", pk.dtype
+                print "length:", fk.length, "|", pk.length
+                #print "pk:", fk.pk, "|", pk.pk
+            except:
+              pass
+              #print "warning: Imposible comparar %s -> %s" % (orig_fk,dest_pk)
+            
+            
+    
+  
+
 def procesarOLAP():
     global Tables
     print "Inicio del proceso de tablas para OLAP."
