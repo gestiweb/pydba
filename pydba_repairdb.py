@@ -93,7 +93,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         for field in fields:
             campo=row[field]
             if (campo is not None):#Si el valor es nulo
-                values.append("'" + pg.escape_string(str(campo)) + "'")
+                values.append("(E'" + pg.escape_string(str(campo)) + "')")
             else:
                 values.append("NULL")
         try:
