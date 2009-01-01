@@ -537,7 +537,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 
                 print  table, len(origin_rows),len(dest_rows),len(update_rows)
               
-            
+        import random
         try:
             for pkey in mparser.primary_key:
                 tfield=mparser.field[pkey]
@@ -547,6 +547,21 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     for dserial in dr_serial:
                         serial=dserial['serial']
                         if serial:
+                            desired_serial = "%s_%s_seq" % (table, tfield.name)
+                            if serial != "public." + desired_serial:
+                                print "WARNING: Sequence does not match desired name: %s != %s " % (serial, desired_serial)
+                                try:
+                                    qry_serial=ddb.query("ALTER SEQUENCE %s RENAME TO %s" % (desired_serial, desired_serial+str(random.randint(100,100000))))
+                                except:
+                                    pass
+                                try:
+                                    qry_serial=ddb.query("ALTER SEQUENCE %s RENAME TO %s" % (serial, desired_serial))
+                                    serial = desired_serial
+                                    print "INFO: Sequence renamed succefully to %s " % serial
+                                except:
+                                    pass
+                                    
+                                
                             qry_maxserial=ddb.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
                             max_serial=1
                             dr_maxserial=qry_maxserial.dictresult()
