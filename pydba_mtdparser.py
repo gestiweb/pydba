@@ -551,11 +551,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                             if serial != "public." + desired_serial:
                                 print "WARNING: Sequence does not match desired name: %s != %s " % (serial, desired_serial)
                                 try:
-                                    qry_serial=ddb.query("ALTER SEQUENCE %s RENAME TO %s" % (desired_serial, desired_serial+str(random.randint(100,100000))))
+                                    # ALTER SEQUENCE - RENAME TO - solo esta disponible  a partir de psql 8.3
+                                    # ALTER TABLE - RENAME TO - es compatible y funciona desde 8.0 o antes
+                                    qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (desired_serial, desired_serial+str(random.randint(100,100000))))
                                 except:
                                     pass
                                 try:
-                                    qry_serial=ddb.query("ALTER SEQUENCE %s RENAME TO %s" % (serial, desired_serial))
+                                    qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (serial, desired_serial))
                                     serial = desired_serial
                                     print "INFO: Sequence renamed succefully to %s " % serial
                                 except:
