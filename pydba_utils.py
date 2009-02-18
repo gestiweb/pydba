@@ -50,7 +50,7 @@ def flscriptparser(root=None,name=None,launch=False):
         filename=os.path.join(root, name)
         flscriptparser_filelist.append(filename)
     
-    if launch:
+    if launch and len(flscriptparser_filelist)>0:
         os.execvp("flscriptparser",["flscriptparser"]+flscriptparser_filelist)
         flscriptparser_filelist=[]
 

@@ -32,8 +32,8 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         
     where=""
     if not options.full :
-        if len(options.files_loaded)>0:
-            where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
+        #if len(options.files_loaded)>0:
+        where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
           
         if len(options.modules)>0:
             where+=" AND ( 0=1 "
