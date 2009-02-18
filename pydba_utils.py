@@ -42,6 +42,18 @@ def loadfile_inutf8(root, name):
     contents=contents.encode('utf8')
     return contents
 
+flscriptparser_filelist = [] 
+
+def flscriptparser(root=None,name=None,launch=False):
+    global flscriptparser_filelist
+    if root and name:
+        filename=os.path.join(root, name)
+        flscriptparser_filelist.append(filename)
+    
+    if launch:
+        os.execvp("flscriptparser",["flscriptparser"]+flscriptparser_filelist)
+        flscriptparser_filelist=[]
+
 
 # Crear una firma SHA1 preferentemente a partir de iso-8859-15
 def SHA1(text):

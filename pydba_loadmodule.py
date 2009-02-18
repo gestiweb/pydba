@@ -70,6 +70,9 @@ def load_module(options,db=None, preparse=False):
     
     if (not options.quiet):
         print "* done"
+    
+    if options.flscriptparser == True:
+        flscriptparser(launch=True)
     return db
     
     
@@ -125,6 +128,9 @@ def load_module_loadone(options,modpath,db, preparse=False):
                         pd[fname]={"mtime":mtime, "sha":sha, 'root' : root,'name' : name}
                         
                 
+                if f_ext(name)=="qs" and loadFile==True and options.flscriptparser==True:
+                    flscriptparser(root,name)              
+                    
                 
                 if f_ext(name)=="mtd":
                     table=name[:-4]

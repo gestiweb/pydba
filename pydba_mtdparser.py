@@ -805,7 +805,7 @@ def procesarOLAP():
     print "%d Relaciones usadas." % len(relations)
     print "%d Relaciones no validadas." % len(fk_relations)
     
-    seltable="lineasfacturascli"
+    seltable="facturascli"
     print "___________________________________"
     s,j=CalculateTable(Tables,seltable)
     print "SELECT " 
@@ -820,6 +820,24 @@ def CalculateTable(Tables,tablename,asname="",tablehistory=[],maxdepth=1):
     if asname=="":
         asname="t"
     table=Tables[tablename]
+    banned_tables = [
+        "co_subcuentas",
+        "impuestos",
+        "co_asientos",
+        "series",
+        "divisas",
+        "ejercicios",
+        "pagosdevolcli",
+        "settallas",
+        "setcolores",
+        "setstallas",
+        "setscolores",
+        "temporadas",
+        "unidades",
+        "setmedidas",
+        "",
+        "",
+    ]
     tablehistory+=[tablename]
     joins = ""
     select = []
@@ -837,7 +855,7 @@ def CalculateTable(Tables,tablename,asname="",tablehistory=[],maxdepth=1):
         
     n=0
     for child_table in table.child_tables:
-        if not child_table['table'] in tablehistory:
+        if not child_table['table'] in tablehistory and not child_table['table'] in banned_tables :
             if maxdepth>0:
                 n+=1
                 child_table['asname']=asname + "_" + str(n) #child_table['nfield']

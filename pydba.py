@@ -26,6 +26,7 @@ def main():
                         debug=False,
                         full=False,
                         rebuildtables=False,
+                        flscriptparser=False,
                         files_loaded=[],
                         modules={}
                         )
@@ -37,6 +38,9 @@ def main():
                         
     parser.add_option("-q", help="Quiet. Produce less output."
                         ,dest="quiet", action="store_true")
+    
+    parser.add_option("-P", help="Parse QS Files using flscriptarser"
+                        ,dest="flscriptparser", action="store_true")
     
     parser.add_option("--full", help="Deeper and slower checks"
                         ,dest="full", action="store_true")
