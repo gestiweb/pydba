@@ -87,7 +87,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
     module=""
     tables=[]
     mtd_files={}
-    filetypes=["xml","ui","qry","kut","qs","mtd","ts"]
+    filetypes=["xml","ui","qry","kut","qs","mtd","ts", "pgsql"]
     unicode_filetypes=["ui","ts"]
     
     files=[]
@@ -120,6 +120,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
                         d_module['icon_data']=loadfile_inutf8(root, d_module['icon'])
                 
                 contents=""
+                contents_1=""
                 if f_ext(name) in filetypes:
                     contents_1=loadfile_inutf8(root,name)
                     contents=pg.escape_string(contents_1)
@@ -130,6 +131,23 @@ def load_module_loadone(options,modpath,db, preparse=False):
                 
                 if f_ext(name)=="qs" and loadFile==True and options.flscriptparser==True:
                     flscriptparser(root,name)              
+                    
+                
+                if f_ext(name)=="pgsql":
+                    array_name=name.split(".")
+                    # name.ext1.pgsql
+                    # array_name = [ "nombre" , "view" , "pgsql" ]
+                    if len(array_name)!=3:
+                        print "ERROR: Al cargar un .pgsql Se esperaban 3 elementos al estilo nombre.view.pgsql y se encontró %s " % name
+                        continue
+                    else:
+                        import pydba_loadpgsql 
+                        pydba_loadpgsql.loadpgsqlfile(database = db, pgname = array_name[0], pgtype = array_name[1], pgtext = contents_1)
+                        
+                        
+                        
+                    
+                
                     
                 
                 if f_ext(name)=="mtd":
