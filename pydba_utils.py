@@ -97,7 +97,8 @@ def dbconnect(options):
                         host=options.dhost, 
                         user=options.duser, 
                         passwd=options.dpasswd )  
-            cn.query("SET client_encoding = 'UTF8';")                
+            cn.query("SET client_encoding = 'UTF8';")    
+            cn.query("SET client_min_messages = warning;");            
     except:
         print("Error trying to connect to database '%s' in host %s:%s" 
                 " using user '%s'" % (
@@ -106,6 +107,7 @@ def dbconnect(options):
                         options.dport,
                         options.duser,
                         ))
+        raise
         return 0
             
     if options.debug: 
@@ -141,6 +143,7 @@ def odbconnect(options):
                         user=options.ouser, 
                         passwd=options.opasswd )  
             cn.query("SET client_encoding = 'UTF8';")                
+            cn.query("SET client_min_messages = warning;");            
     except:
         print("Error trying to connect to *origin* database '%s' in host %s:%s" 
                 " using user '%s'" % (

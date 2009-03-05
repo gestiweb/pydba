@@ -166,7 +166,7 @@ class MTDParser:
         
 
 # Crea una tabla según las especificaciones del MTD
-def create_table(db,table,mtd,existent_fields=[]):
+def create_table(db,table,mtd,existent_fields=[],oldtable=None):
     existent_fields=set(existent_fields)
     txtfields=[]
     typetr={
@@ -182,6 +182,7 @@ def create_table(db,table,mtd,existent_fields=[]):
     }
     constraints=[]
     indexes=[]
+    drops=[]
     if len(existent_fields)>0:
         mode="alter"
     else:
@@ -232,7 +233,9 @@ def create_table(db,table,mtd,existent_fields=[]):
             if hasattr(field,"pk"):
                 if str(field.pk)=='true':
                     if mode=="create":
-                        
+                        #drops.append("DROP INDEX %s_%s_m1_idx CASCADE;" % (table,row['name']))
+                        #drops.append("DROP INDEX %s_%sup_m1_idx CASCADE;" % (table,row['name']))
+                        if oldtable: drops.append("ALTER TABLE %s DROP CONSTRAINT %s_pkey CASCADE;" % (oldtable,table))
                         indexes+=["CREATE INDEX %s_%s_m1_idx" 
                                 " ON %s USING btree (%s %s);" 
                                 % (table,row['name'],table,row['name'],index_adds)]
@@ -249,6 +252,8 @@ def create_table(db,table,mtd,existent_fields=[]):
                     if hasattr(relation,"card"):
                         if str(relation.card)=='M1' and index_loaded==False:
                             index_loaded=True
+                            #drops.append("DROP INDEX %s_%s_m1_idx CASCADE;" % (table,row['name']))
+                            #drops.append("DROP INDEX %s_%sup_m1_idx CASCADE;" % (table,row['name']))
                             indexes+=["CREATE INDEX %s_%s_m1_idx" 
                                     " ON %s USING btree (%s %s);" 
                                     % (table,row['name'],table,row['name'],index_adds)]
@@ -262,6 +267,16 @@ def create_table(db,table,mtd,existent_fields=[]):
             txtfields+=["\"%(name)s\" %(type)s %(options)s" % row]
     
     if mode=="create":
+        for drop in drops:
+            try:
+                db.query(drop)
+            except:
+                pass
+                #print "ERROR:", drop , " .. execution failed:"
+                #import sys
+                #traceback.print_exc(file=sys.stdout)
+                #print "-------"
+                
         txtfields+=constraints
         txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS;" % (table, ",\n".join(txtfields))
         
@@ -301,10 +316,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     
     mtd=mtd_parse.root.tmd
     if table!=table.lower():
-        print "WARNING: Table name '%s' has uppercaps" % table
+        print "ERROR: Table name '%s' has uppercaps" % table
         table=table.lower()
     if str(mtd.name)!=table:
-        print "WARNING: Expected '%s' in MTD name but found '%s' ***" % (table,str(mtd.name))
+        print "WARNING: Expected '%s' in MTD name but '%s' found ***" % (table,str(mtd.name))
     
     qry_columns=ddb.query("SELECT * from information_schema.columns"
                 " WHERE table_schema = 'public' AND table_name='%s'" % table)
@@ -349,7 +364,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         for field in mtd.field:
             name=str(field.name)
             if not tablefields.has_key(name):
-                print "warn: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
+                #print "warn: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
                 Regenerar=True
             else:
               mfield = mparser.field[name]
@@ -370,15 +385,15 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               #print null, dtype, length
               
               if null != mfield.null and null == False: 
-                print "warn: La columna '%s' en la tabla '%s' ha establecido null de %s a %s" % (name,table,null,mfield.null)
+                #print "warn: La columna '%s' en la tabla '%s' ha establecido null de %s a %s" % (name,table,null,mfield.null)
                 Regenerar=True
               
               if dtype != mfielddtype: 
-                print "warn: La columna '%s' en la tabla '%s' ha cambiado el tipo de datos de %s a %s" % (name,table,dtype,mfielddtype)
+                #print "warn: La columna '%s' en la tabla '%s' ha cambiado el tipo de datos de %s a %s" % (name,table,dtype,mfielddtype)
                 Regenerar=True
               
               if length != mfield.length: 
-                print "warn: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
+                #print "warn: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
                 Regenerar=True
               
               
@@ -389,13 +404,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             for field in reversed(mparser.basic_fields):
                 name=field
                 if not name in origin_tablefields:
-                    print "ERROR: La base de datos de origien no tiene la columna '%s' en la tabla '%s'" % (name,table)
+                    #print "ERROR: La base de datos de origien no tiene la columna '%s' en la tabla '%s'" % (name,table)
                     try:
                         mparser.basic_fields.remove(name)
                     except:
                         pass
         else:
-            print "ERROR: La BD origien no tiene la tabla '%s'" % (table)
+            #print "ERROR: La BD origien no tiene la tabla '%s'" % (table)
             mparser.basic_fields=[]
             #print "*****"
             #for atr in dir(field):
@@ -409,6 +424,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
            
         if Regenerar:
+        
             # Borrar primero los índices (todos) que tiene la tabla:
             qry_indexes = ddb.query("""
     SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
@@ -425,15 +441,96 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 data=export_table(options,ddb,table)
             else:
                 data=None
+            import datetime, random
+            now = datetime.datetime.now()
+            nseed = random.randint(0,255)
+            
+            newnametable = "%s_%04d%02d%02d%02d%02d%02x" % (table,now.year,now.month,now.day,now.hour,now.minute, nseed)
+            fail = False
             try:
-              ddb.query("DROP TABLE %s" % table)
+              ddb.query("ALTER TABLE %s RENAME TO %s" % (table,newnametable))
             except:
-              print "No se pudo borrar la tabla."
+              print "No se pudo renombrar la tabla."
+              return
+
+            for pkey in mparser.primary_key:
+                tfield=mparser.field[pkey]
+                if tfield.dtype=='serial':
+                    desired_serial = "%s_%s_seq" % (table, tfield.name)
+                    try:
+                        # ALTER SEQUENCE - RENAME TO - solo esta disponible  a partir de psql 8.3
+                        # ALTER TABLE - RENAME TO - es compatible y funciona desde 8.0 o antes
+                        qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (desired_serial, desired_serial+str(random.randint(100,100000))))
+                    except:
+                        pass
             try:
-              create_table(ddb,table,mtd)
-              if data: import_table(options,ddb,table,data,mparser.field)
+              create_table(ddb,table,mtd,oldtable=newnametable)
             except:
-              print "ERROR: Se encontraron errores graves al importar la tabla %s" % table
+              fail = True
+              print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
+              import traceback
+              why = traceback.format_exc()
+              print "**** Motivo:" , why
+              
+            if len(data)>1000:
+                print "Insertando %d filas en %s ... " % (len(data), table)
+
+            log = auto_import_table(options,ddb,table,data,mparser.field)
+            
+            if len(log):
+                fail = True
+                print "ERROR: No se pudieron crear %d filas en la tabla %s" % (len(log), table)
+                print " **** Exite un backup de los datos originales en la tabla %s " % newnametable
+                filelog = open("/tmp/%s.log.sql" % newnametable,"w")
+                for line in log:
+                    why = line["*why*"]
+                    del line["*why*"]
+                    fields=[]
+                    values=[]
+                    for field,value in line.iteritems():
+                        if field[0]!='#':
+                            fields.append(field)
+                            ivalue=sql_formatstring(value,mparser.field[field])
+                            values.append(ivalue)
+                
+                    sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
+                    print >> filelog , sql
+                    #print >> filelog , "/* motivo:"
+                    #print >> filelog , why
+                    #print >> filelog , "*/"
+                    
+                filelog.close()
+                print " **** Se ha guardado un registro en formato SQL con las filas que faltan por migrar en /tmp/%s.log.sql" % newnametable
+                    
+            rows1 = len(data)
+            rows2 = len(export_table(options,ddb,table))
+            if rows1 != rows2:
+                print "ERROR: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se deshace el cambio." % (rows2,rows1)
+                fail = True
+            
+            if fail:
+                try:
+                  ddb.query("DROP TABLE %s;" % (table))
+                except:
+                  print "No se pudo borrar la tabla nueva."
+                  pass  
+
+                try:
+                  ddb.query("ALTER TABLE %s RENAME TO %s;" % (newnametable,table))
+                except:
+                  print "No se pudo renombrar la tabla."
+                  pass  
+                
+                return           
+            else:
+                try:
+                  ddb.query("DROP TABLE %s;" % (newnametable))
+                except:
+                  print "No se pudo borrar la tabla de backup."
+                  pass  
+                   
+                
+                            
               
               
         # SINCRONIZACION MAESTRO>ESCLAVO      
@@ -613,7 +710,35 @@ def export_table(options,db,table, fields=['*']):
         raise
     return filas
 
+def auto_import_table(options,ddb,table,data,mparser_field):
+    sz = len(data)
+    if sz == 0: return [];
+    
+    sz1 = len(export_table(options,ddb,table))
+    
+    
+    try:
+        import_table(options,ddb,table,data,mparser_field)
+        sz2 = len(export_table(options,ddb,table))
+        if sz2 - sz1 == sz:      
+            return []
+        else:
+            raise NameError, "Error al copiar lineas!"
+    except:
+        if sz > 1:
+            half = sz / 2
+            log = []
+            log += auto_import_table(options,ddb,table,data[:half],mparser_field)
+            log += auto_import_table(options,ddb,table,data[half:],mparser_field)
+        else:
+            why = ""
+            import traceback
+            why = traceback.format_exc()
+            data[0]["*why*"] = why
+            log = data
 
+        return log
+        
     
     
 def sql_formatstring(value,field,format='i'):
@@ -661,8 +786,6 @@ def import_table(options,db,table,data,nfields):
     if not len(data):
         return 
     
-    if len(data)>1:
-        print "Insertando %d filas en %s ... " % (len(data), table)
     sqlarray=[]
     error=False
     
@@ -670,7 +793,11 @@ def import_table(options,db,table,data,nfields):
     selected_fields=set(data[0].keys())
     fields_toadd=total_fields-selected_fields
     
-    
+    if len(data)>1:
+        db.query("SET client_min_messages = fatal;");            
+    else:
+        db.query("SET client_min_messages = notice;");            
+
     for fila in data:
         fields=[]
         values=[]
@@ -709,9 +836,9 @@ def import_table(options,db,table,data,nfields):
     db.putline("\\."+"\n")
     db.endcopy()
     sqlarray=[]
+    db.query("SET client_min_messages = warning;");            
     
-    if len(data)>1000:
-        print "* hecho"
+    
 
 def comprobarRelaciones():
     global Tables

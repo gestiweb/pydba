@@ -261,7 +261,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
             file['module']=module
             
             sql=("INSERT INTO flfiles (contenido, bloqueo, sha, idmodulo, nombre) "    
-                    "VALUES('%(contents)s', 't', '%(sha)s','%(module)s', '%(name)s')" % file)
+                    "VALUES(E'%(contents)s', 't', '%(sha)s','%(module)s', '%(name)s')" % file)
             db.query(sql)
     
     

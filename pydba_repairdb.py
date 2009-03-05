@@ -152,7 +152,6 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             for txml in tablas:
                 TablaCargada=True
                 if txml['xml']!=sha1:
-                    print "Actualizada la Tabla: " + tabla
                     sql+="UPDATE flmetadata SET xml='%s' WHERE tabla='%s';\n" % (sha1,tabla)
             if not TablaCargada:
                     print "Cargando tabla nueva %s ..." % tabla
