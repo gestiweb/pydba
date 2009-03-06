@@ -452,9 +452,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             except:
               print "No se pudo renombrar la tabla."
               return
-
+            primarykey = None
             for pkey in mparser.primary_key:
                 tfield=mparser.field[pkey]
+                primarykey = pkey
                 if tfield.dtype=='serial':
                     desired_serial = "%s_%s_seq" % (table, tfield.name)
                     try:
@@ -475,7 +476,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             if len(data)>1000:
                 print "Insertando %d filas en %s ... " % (len(data), table)
 
-            log = auto_import_table(options,ddb,table,data,mparser.field)
+            log = auto_import_table(options,ddb,table,data,mparser.field, pkey = primarykey)
             
             if len(log):
                 fail = True
@@ -483,18 +484,24 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 print " **** Exite un backup de los datos originales en la tabla %s " % newnametable
                 filelog = open("/tmp/%s.log.sql" % newnametable,"w")
                 for line in log:
-                    why = line["*why*"]
-                    del line["*why*"]
-                    fields=[]
-                    values=[]
-                    for field,value in line.iteritems():
-                        if field[0]!='#':
-                            fields.append(field)
-                            ivalue=sql_formatstring(value,mparser.field[field])
-                            values.append(ivalue)
+                    try:
+                        why = line["*why*"]
+                        del line["*why*"]
+                        fields=[]
+                        values=[]
+                        for field,value in line.iteritems():
+                            if field[0]!='#' and field in mparser.field:
+                                fields.append(field)
+                                ivalue=sql_formatstring(value,mparser.field[field])
+                                values.append(ivalue)
                 
-                    sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
-                    print >> filelog , sql
+                        sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
+                        print >> filelog , sql
+                    except:
+                        import traceback
+                        why = traceback.format_exc()
+                        print "**** Error al generar el sql de backup:" , why
+                    
                     #print >> filelog , "/* motivo:"
                     #print >> filelog , why
                     #print >> filelog , "*/"
@@ -510,9 +517,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
             if fail:
                 try:
-                  ddb.query("DROP TABLE %s;" % (table))
+                  ddb.query("ALTER TABLE %s RENAME TO %s_new;" % (table,newnametable))
                 except:
-                  print "No se pudo borrar la tabla nueva."
+                  print "No se pudo renombrar la tabla nueva."
                   pass  
 
                 try:
@@ -710,34 +717,50 @@ def export_table(options,db,table, fields=['*']):
         raise
     return filas
 
-def auto_import_table(options,ddb,table,data,mparser_field):
+def auto_import_table(options,ddb,table,data,mparser_field,pkey):
     sz = len(data)
     if sz == 0: return [];
     
-    sz1 = len(export_table(options,ddb,table))
     
     
     try:
         import_table(options,ddb,table,data,mparser_field)
-        sz2 = len(export_table(options,ddb,table))
-        if sz2 - sz1 == sz:      
-            return []
-        else:
-            raise NameError, "Error al copiar lineas!"
     except:
-        if sz > 1:
-            half = sz / 2
-            log = []
-            log += auto_import_table(options,ddb,table,data[:half],mparser_field)
-            log += auto_import_table(options,ddb,table,data[half:],mparser_field)
-        else:
-            why = ""
-            import traceback
-            why = traceback.format_exc()
-            data[0]["*why*"] = why
-            log = data
+        pass
+        
+    lst_filas = []
+    for fila in data:
+        lst_filas.append(fila[pkey])
+        
+    
+    sz2 = 0
+    try:
+        sql = "SELECT COUNT(*) as num FROM %s WHERE %s IN (%s)" % (table,pkey,", ".join(lst_filas))
+        qry = db.query(sql)
+        cnum = qry.dictresult() 
+        sz2 = int(cnum[0]["num"])
+    except:
+        sz2 = 0
+    
+    
+    if sz2 == sz:      
+        return []
 
-        return log
+    if sz > 10:
+        half = sz / 2
+        log = []
+        log += auto_import_table(options,ddb,table,data[:half],mparser_field, pkey)
+        log += auto_import_table(options,ddb,table,data[half:],mparser_field, pkey)
+    else:
+        why = ""
+        import traceback
+        why = traceback.format_exc()
+        for line in data:
+            line["*why*"] = why
+            
+        log = data
+
+    return log
         
     
     
@@ -793,7 +816,7 @@ def import_table(options,db,table,data,nfields):
     selected_fields=set(data[0].keys())
     fields_toadd=total_fields-selected_fields
     
-    if len(data)>1:
+    if len(data)>10:
         db.query("SET client_min_messages = fatal;");            
     else:
         db.query("SET client_min_messages = notice;");            
