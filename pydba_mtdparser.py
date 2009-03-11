@@ -424,7 +424,26 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             # Si no hay campos que pasar, generamos la tabla de cero.
             Regenerar=True
             
-           
+        if Regenerar:
+            primarykey = None
+            for pkey in mparser.primary_key:
+                tfield=mparser.field[pkey]
+                primarykey = pkey
+
+            if primarykey:
+                sql = "SELECT  COUNT(%s) as n FROM %s" % (primarykey,table)
+                qry = ddb.query(sql)
+                filas = qry.dictresult() 
+                for fila in filas:
+                    c = int(fila["n"])
+                    if c>200000:
+                        print "*** ERROR: La tabla %s supera el límite de filas de PyDBA (>200.000) para regenerar tablas (%d filas). Se aborta rebuild." % (table,c)
+                        Regenerar = False
+
+            else:            
+                print "*** ERROR: La tabla %s no tiene primarykey, no puede ser regenerada." % (table)
+                Regenerar = False
+               
         if Regenerar:
         
             # Borrar primero los índices (todos) que tiene la tabla:
@@ -475,10 +494,12 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               why = traceback.format_exc()
               print "**** Motivo:" , why
               
-            if len(data)>1000:
-                print "Insertando %d filas en %s ... " % (len(data), table)
+            if len(data)>200 or options.debug:
+                print "Regenerando tabla %s (%d filas)  ... " % (table, len(data))
 
             log = auto_import_table(options,ddb,table,data,mparser.field, pkey = primarykey)
+            if options.debug:
+                print "finalizo la insercion de %d filas en %s" % (len(data), table)
             
             if len(log):
                 fail = True
@@ -723,6 +744,31 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
     sz = len(data)
     if sz == 0: return [];
     
+    if sz > 800:
+        half = 200
+        if sz > 5000: half *= 2
+        if sz > 25000: half *= 2
+        
+        log = []
+        lh = 0
+        while (lh < sz):
+            rh = lh + half
+            if rh > sz: rh = sz
+        
+            if (options.debug):
+                print "** Subdividiendo importacion de tabla %s (%d:%d) **" % (table,lh,rh)
+            else:
+                import sys
+                sys.stdout.write('.')
+                sys.stdout.flush()
+                
+            log += auto_import_table(options,ddb,table,data[lh:rh],mparser_field, pkey)
+            lh = rh
+
+        print 
+        
+        
+        return log
     
     
     try:
@@ -765,10 +811,10 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
         why = traceback.format_exc()
         print "--- Error al contar filas: "
         print why
-        print "SQL  :: " , sql
+        print "SQL  :: " , sql[:100]
         print "Pkey :: " , pkey
         print "Table:: " , table
-        print "Filas:: " , ", ".join(lst_filas)
+        print "Filas:: " , len(lst_filas)
         print "******"
         
         
