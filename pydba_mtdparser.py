@@ -235,14 +235,16 @@ def create_table(db,table,mtd,existent_fields=[],oldtable=None):
                     if mode=="create":
                         #drops.append("DROP INDEX %s_%s_m1_idx CASCADE;" % (table,row['name']))
                         #drops.append("DROP INDEX %s_%sup_m1_idx CASCADE;" % (table,row['name']))
-                        if oldtable: drops.append("ALTER TABLE %s DROP CONSTRAINT %s_pkey CASCADE;" % (oldtable,table))
+                        # if oldtable: drops.append("ALTER TABLE %s DROP CONSTRAINT %s_pkey CASCADE;" % (oldtable,table))
                         indexes+=["CREATE INDEX %s_%s_m1_idx" 
                                 " ON %s USING btree (%s %s);" 
                                 % (table,row['name'],table,row['name'],index_adds)]
                         indexes+=["CREATE INDEX %s_%sup_m1_idx" 
                                 " ON %s USING btree (upper(%s::text) %s);" 
                                     % (table,row['name'],table,row['name'],index_adds)]
-                        constraints+=["CONSTRAINT %s_pkey PRIMARY KEY (%s)" % (table,row['name'])]
+                        import random
+                        rn = random.randint(100,999)
+                        constraints+=["CONSTRAINT %s_pkey_%d PRIMARY KEY (%s)" % (table,rn,row['name'])]
                     else:
                         print("ERROR: Cannot alter table to add '%s' as a primary key!."
                                     " Delete table '%s' and try again." % (row['name'],table))
@@ -730,27 +732,61 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
         
     lst_filas = []
     for fila in data:
-        lst_filas.append(fila[pkey])
+        lst_filas.append("'" + pg.escape_string(str(fila[pkey])) + "'")
         
-    
+    newdata = data[:]
     sz2 = 0
+    sql = ""
     try:
-        sql = "SELECT COUNT(*) as num FROM %s WHERE %s IN (%s)" % (table,pkey,", ".join(lst_filas))
-        qry = db.query(sql)
+        sql = "SELECT %s as pkey FROM %s WHERE %s IN (%s)" % (pkey,table,pkey,", ".join(lst_filas))
+        qry = ddb.query(sql)
         cnum = qry.dictresult() 
-        sz2 = int(cnum[0]["num"])
+        for rkval in cnum:
+            kval ="'" + pg.escape_string(str(rkval["pkey"])) + "'" 
+            try:
+                num = lst_filas.index(kval)
+                if lst_filas[num] != kval:
+                    print "** se esperaba " , kval , " y se encontro " , lst_filas[num] , " en el array de pkeys."
+                else:
+                    del newdata[num]
+                    del lst_filas[num]
+            except:
+                print " ** Error desconocido ocurrio comparando los primary keys. ** "
+                print " kval :: " , kval
+                import traceback
+                
+                why = traceback.format_exc()
+                print why
+        sz2 =len(cnum)
     except:
         sz2 = 0
+        why = ""
+        import traceback
+        why = traceback.format_exc()
+        print "--- Error al contar filas: "
+        print why
+        print "SQL  :: " , sql
+        print "Pkey :: " , pkey
+        print "Table:: " , table
+        print "Filas:: " , ", ".join(lst_filas)
+        print "******"
+        
+        
     
     
     if sz2 == sz:      
+        if len(newdata):
+            print "*** INFO: habian %d filas en los datos restantes para insertar, pero no eran necesarios." % len(newdata)
         return []
-
-    if sz > 10:
-        half = sz / 2
+    nsz = len(newdata)
+    if nsz != (sz-sz2):
+        print " *** Se esperaba que NSZ fuera (%d - %d) = %d y en realidad vale %d (datos probablemente corruptos) *** " % (sz,sz2,sz-sz2,nsz)
+        
+    if nsz > 1:
+        half = nsz / 2
         log = []
-        log += auto_import_table(options,ddb,table,data[:half],mparser_field, pkey)
-        log += auto_import_table(options,ddb,table,data[half:],mparser_field, pkey)
+        log += auto_import_table(options,ddb,table,newdata[:half],mparser_field, pkey)
+        log += auto_import_table(options,ddb,table,newdata[half:],mparser_field, pkey)
     else:
         why = ""
         import traceback

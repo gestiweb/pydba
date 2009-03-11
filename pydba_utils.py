@@ -19,16 +19,24 @@ def copy_escapechars(text):
     if text is False: return "f"
         
     text=str(text)
+    transorder = [
+        "\\n",
+        "\\",
+        "\b","\f","\r","\t","\v","\n"
+        ]
     transstr={
+        "\\n": "\n",
+        "\\": "\\\\",
         "\b": "\\b",
         "\f": "\\f",
         "\n": "\\n",
         "\r": "\\r",
         "\t": "\\t",
-        "\v": "\\v",
-        "\\": "\\\\"}
+        "\v": "\\v"
+        }
 
-    for key,val in transstr.iteritems():
+    for key in transorder:
+        val = transstr[key]
         text=text.replace(key,val)
     
     return text
