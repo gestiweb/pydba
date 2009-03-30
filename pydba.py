@@ -96,6 +96,7 @@ def main():
     
     g_options.add_option("--loaddir",dest="loaddir", help="Select Working Directory for Modules")
 
+    g_options.add_option("--loadbaselec",dest="loadbaselec", help="Import CSV File to Baselec table ('-' for stdin)")
     
     g_options.add_option("--loadini", dest="loadini", help="load and execute INI file")
                 

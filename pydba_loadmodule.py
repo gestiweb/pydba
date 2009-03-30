@@ -250,7 +250,14 @@ def load_module_loadone(options,modpath,db, preparse=False):
             dm=dmodulos[file['name']]
             if (dm['sha']==file['sha']):
                 update=False
+                if file['name']=='baselec.mtd':
+                    if options.loadbaselec:
+                      update=True
         
+        if file['name']!='baselec.mtd':
+            if options.loadbaselec:
+              update=False
+              
         if (update):
             loaded+=[file['name']]
             if (options.verbose):

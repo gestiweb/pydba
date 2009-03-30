@@ -5,6 +5,8 @@
 import pg             # depends - python-pygresql
 import _mysql     # depends - python-mysqldb
 import traceback
+import os
+import re
 
 from pydba_utils import *
 
@@ -443,6 +445,21 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             else:            
                 print "*** ERROR: La tabla %s no tiene primarykey, no puede ser regenerada." % (table)
                 Regenerar = False
+
+        if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
+            print "Iniciando volcado de Baselec ****"
+            print "Vaciando tabla . . . ",
+            try:
+              ddb.query("DELETE FROM %s" % (table))
+            except:
+              print "No se pudo vaciar la tabla."
+              return
+            print "done"
+            Regenerar = True
+
+         
+            
+            
                
         if Regenerar:
         
@@ -559,7 +576,83 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                   print "No se pudo borrar la tabla de backup."
                   pass  
                    
+        # ************************************* BASELEC *****************************************
                 
+        if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
+            import datetime
+            
+            csv=open(options.loadbaselec,"r")
+            print "Contando lineas . . . "
+            lineas = -1 # -1 debido a que la primera fila es la cabecera.
+            for csvline in csv:
+                lineas +=1
+            print "%d registros en el fichero. " % lineas
+            csv.close()
+            
+            csv=open(options.loadbaselec,"r")
+
+            csvfields=csv.readline().split("\t")
+            for n,field in enumerate(csvfields):
+                field = field.replace(" ","")
+                field = field.lower()
+                field = field.replace("+","mas")
+                field = re.sub(r'[^a-z0-9]','',field)
+                if field in mparser.field:
+                  csvfields[n]=field
+                else:
+                  csvfields[n]="* " + field
+                
+                
+            data = []
+            to1 = 0
+
+            for csvline in csv:
+                csvreg = csvline.split("\t")
+                line = {}
+                for n, val in enumerate(csvreg):
+                    fieldname = csvfields[n]
+                    if fieldname[0]=="*": continue
+                    try:
+                        val=val.decode("cp1252")
+                        val=val.encode("utf8")
+                        
+                    except:
+                        val=None
+                    if mparser.field[fieldname].dtype == 'double precision':
+                        try:
+                            val = float(re.sub(r"[^0-9\.]",'',val))
+                        except:
+                            val = 0
+                    elif mparser.field[fieldname].dtype == 'date':
+                        try:
+                            dt = datetime.strptime(val, "%d/%m/%Y %H:%M:%S")
+                            val = dt.isoformat()
+                        except:
+                            val = None
+                    
+                    if val == "": val = None
+                    line[fieldname]=val
+                data.append(line)
+                to1 += 1
+                if len(data)>=10000:
+                    from1 = to1 - len(data)
+                    pfrom1 = from1 * 100.0 / lineas
+                    pto1 = to1 * 100.0 / lineas
+                    
+                    print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
+                    # print "Copiando registros %.1f%% - %.1f%% . . ." % (pfrom1, pto1)
+                    auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+                    data = []                              
+
+            from1 = to1 - len(data)
+            pfrom1 = from1 * 100.0 / lineas
+            pto1 = to1 * 100.0 / lineas
+
+            print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom, from1+1, to1+1)
+            auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+            data = []                              
+
+            csv.close()
                             
               
               
