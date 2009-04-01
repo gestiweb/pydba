@@ -7,6 +7,7 @@ import _mysql     # depends - python-mysqldb
 import traceback
 import os
 import re
+import sys
 
 from pydba_utils import *
 
@@ -448,13 +449,16 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
 
         if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
             print "Iniciando volcado de Baselec ****"
-            print "Vaciando tabla . . . ",
+            import sys
+            #sys.stdout.flush()
+            print "Vaciando tabla . . . "
+            sys.stdout.flush()
             try:
               ddb.query("DELETE FROM %s" % (table))
             except:
               print "No se pudo vaciar la tabla."
               return
-            print "done"
+            #print "done"
             Regenerar = True
 
          
@@ -583,10 +587,12 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
             csv=open(options.loadbaselec,"r")
             print "Contando lineas . . . "
+            sys.stdout.flush()
             lineas = -1 # -1 debido a que la primera fila es la cabecera.
             for csvline in csv:
                 lineas +=1
             print "%d registros en el fichero. " % lineas
+            sys.stdout.flush()
             csv.close()
             
             csv=open(options.loadbaselec,"r")
@@ -634,12 +640,15 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     line[fieldname]=val
                 data.append(line)
                 to1 += 1
-                if len(data)>=10000:
+                if len(data)>=500:
                     from1 = to1 - len(data)
                     pfrom1 = from1 * 100.0 / lineas
                     pto1 = to1 * 100.0 / lineas
                     
                     print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
+                    
+                    #sys.stdout.write('.')
+                    sys.stdout.flush()
                     # print "Copiando registros %.1f%% - %.1f%% . . ." % (pfrom1, pto1)
                     auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
                     data = []                              
@@ -649,6 +658,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             pto1 = to1 * 100.0 / lineas
 
             print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom, from1+1, to1+1)
+            import sys
+            sys.stdout.flush()
             auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
             data = []                              
 

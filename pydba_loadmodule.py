@@ -275,6 +275,8 @@ def load_module_loadone(options,modpath,db, preparse=False):
     
     if (not options.quiet and len(loaded)>0): 
         print "Module %s: loaded %d of %d files. (%s...)" % (module, len(loaded), len(files),",".join(loaded[:3]))
+        import sys
+        sys.stdout.flush()
             
 
     options.files_loaded+=loaded
