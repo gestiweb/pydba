@@ -640,7 +640,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     line[fieldname]=val
                 data.append(line)
                 to1 += 1
-                if len(data)>=500:
+                if len(data)>=1000:
                     from1 = to1 - len(data)
                     pfrom1 = from1 * 100.0 / lineas
                     pto1 = to1 * 100.0 / lineas
@@ -650,17 +650,19 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     #sys.stdout.write('.')
                     sys.stdout.flush()
                     # print "Copiando registros %.1f%% - %.1f%% . . ." % (pfrom1, pto1)
-                    auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+                    # auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+                    import_table(options,ddb,table,data,mparser.field)
                     data = []                              
 
             from1 = to1 - len(data)
             pfrom1 = from1 * 100.0 / lineas
             pto1 = to1 * 100.0 / lineas
 
-            print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom, from1+1, to1+1)
+            print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
             import sys
             sys.stdout.flush()
-            auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+            #auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+            import_table(options,ddb,table,data,mparser.field)
             data = []                              
 
             csv.close()
