@@ -514,51 +514,51 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               import traceback
               why = traceback.format_exc()
               print "**** Motivo:" , why
-              
-            if len(data)>200 or options.debug:
-                print "Regenerando tabla %s (%d filas)  ... " % (table, len(data))
-
-            log = auto_import_table(options,ddb,table,data,mparser.field, pkey = primarykey)
-            if options.debug:
-                print "finalizo la insercion de %d filas en %s" % (len(data), table)
-            
-            if len(log):
-                fail = True
-                print "ERROR: No se pudieron crear %d filas en la tabla %s" % (len(log), table)
-                print " **** Exite un backup de los datos originales en la tabla %s " % newnametable
-                filelog = open("/tmp/%s.log.sql" % newnametable,"w")
-                for line in log:
-                    try:
-                        why = line["*why*"]
-                        del line["*why*"]
-                        fields=[]
-                        values=[]
-                        for field,value in line.iteritems():
-                            if field[0]!='#' and field in mparser.field:
-                                fields.append(field)
-                                ivalue=sql_formatstring(value,mparser.field[field])
-                                values.append(ivalue)
+            if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
+                if len(data)>200 or options.debug:
+                    print "Regenerando tabla %s (%d filas)  ... " % (table, len(data))
+    
+                log = auto_import_table(options,ddb,table,data,mparser.field, pkey = primarykey)
+                if options.debug:
+                    print "finalizo la insercion de %d filas en %s" % (len(data), table)
                 
-                        sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
-                        print >> filelog , sql
-                    except:
-                        import traceback
-                        why = traceback.format_exc()
-                        print "**** Error al generar el sql de backup:" , why
+                if len(log):
+                    fail = True
+                    print "ERROR: No se pudieron crear %d filas en la tabla %s" % (len(log), table)
+                    print " **** Exite un backup de los datos originales en la tabla %s " % newnametable
+                    filelog = open("/tmp/%s.log.sql" % newnametable,"w")
+                    for line in log:
+                        try:
+                            why = line["*why*"]
+                            del line["*why*"]
+                            fields=[]
+                            values=[]
+                            for field,value in line.iteritems():
+                                if field[0]!='#' and field in mparser.field:
+                                    fields.append(field)
+                                    ivalue=sql_formatstring(value,mparser.field[field])
+                                    values.append(ivalue)
                     
-                    #print >> filelog , "/* motivo:"
-                    #print >> filelog , why
-                    #print >> filelog , "*/"
-                    
-                filelog.close()
-                print " **** Se ha guardado un registro en formato SQL con las filas que faltan por migrar en /tmp/%s.log.sql" % newnametable
-                    
-            rows1 = len(data)
-            rows2 = len(export_table(options,ddb,table))
-            if rows1 != rows2:
-                print "ERROR: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se deshace el cambio." % (rows2,rows1)
-                fail = True
-            
+                            sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
+                            print >> filelog , sql
+                        except:
+                            import traceback
+                            why = traceback.format_exc()
+                            print "**** Error al generar el sql de backup:" , why
+                        
+                        #print >> filelog , "/* motivo:"
+                        #print >> filelog , why
+                        #print >> filelog , "*/"
+                        
+                    filelog.close()
+                    print " **** Se ha guardado un registro en formato SQL con las filas que faltan por migrar en /tmp/%s.log.sql" % newnametable
+                        
+                rows1 = len(data)
+                rows2 = len(export_table(options,ddb,table))
+                if rows1 != rows2:
+                    print "ERROR: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se deshace el cambio." % (rows2,rows1)
+                    fail = True
+                
             if fail:
                 try:
                   ddb.query("ALTER TABLE %s RENAME TO %s_new;" % (table,newnametable))
