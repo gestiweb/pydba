@@ -466,19 +466,22 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
                
         if Regenerar:
-        
+            print "Regenerando tabla %s" % table
+            
             # Borrar primero los índices (todos) que tiene la tabla:
-            qry_indexes = ddb.query("""
-    SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
-    FROM pg_class pc 
-    INNER JOIN pg_index pi ON pc.oid=pi.indrelid 
-    INNER JOIN pg_class pc2 ON pi.indexrelid=pc2.oid
-    WHERE NOT pi.indisprimary AND NOT pi.indisunique
-    AND pc.relname = '%s'
-            """ % table)
-            dt_indexes=qry_indexes.dictresult() 
-            for fila in dt_indexes:
-                ddb.query("DROP INDEX %s;" % fila['indice'])
+            if False: # Anulado, porque es mejor hacer un DROP CASCADE
+                qry_indexes = ddb.query("""
+        SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
+        FROM pg_class pc 
+        INNER JOIN pg_index pi ON pc.oid=pi.indrelid 
+        INNER JOIN pg_class pc2 ON pi.indexrelid=pc2.oid
+        WHERE NOT pi.indisprimary AND NOT pi.indisunique
+        AND pc.relname = '%s'
+                """ % table)
+                dt_indexes=qry_indexes.dictresult() 
+                for fila in dt_indexes:
+                    ddb.query("DROP INDEX %s;" % fila['indice'])
+            
             if len(mparser.basic_fields)>0:
                 data=export_table(options,ddb,table)
             else:
@@ -515,6 +518,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               why = traceback.format_exc()
               print "**** Motivo:" , why
             if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
+                print "Tabla Baselec encontrada."
+            else:
                 if len(data)>200 or options.debug:
                     print "Regenerando tabla %s (%d filas)  ... " % (table, len(data))
     
@@ -575,7 +580,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 return           
             else:
                 try:
-                  ddb.query("DROP TABLE %s;" % (newnametable))
+                  ddb.query("DROP TABLE %s CASCADE;" % (newnametable))
                 except:
                   print "No se pudo borrar la tabla de backup."
                   pass  

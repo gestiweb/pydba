@@ -46,7 +46,7 @@ def loadview(database, pgname, code, sql):
      
         
     try:
-        database.query("DROP VIEW %s;" % pgname)
+        database.query("DROP VIEW %s CASCADE;" % pgname)
     except:
         pass
     
