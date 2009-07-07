@@ -27,13 +27,17 @@ def main():
                         debug=False,
                         full=False,
                         diskcopy=False,
+                        getdiskcopy=False,
                         rebuildtables=False,
                         flscriptparser=False,
                         files_loaded=[],
                         modules={}
                         )
-    parser.add_option("--diskcopy", help="Copies all processed tables to /tmp/*.dat"
+    parser.add_option("--diskcopy", help="Copies all processed tables to /tmp/psqldiskcopy/*.dat"
                         ,dest="diskcopy", action="store_true")
+                        
+    parser.add_option("--getdiskcopy", help="Loads processed tables from /tmp/psqldiskcopy/*.dat"
+                        ,dest="getdiskcopy", action="store_true")
                         
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")

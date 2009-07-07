@@ -428,14 +428,6 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             # Si no hay campos que pasar, generamos la tabla de cero.
             Regenerar=True
         
-        if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
-            # Generar comandos copy si se especifico
-            primarykey = mparser.primary_key[0]
-            fields = ', '.join(mparser.basic_fields)
-            
-            sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO '/tmp/psqldiskcopy/%s.dat'" % (fields, table, primarykey, table)
-            qry = ddb.query(sql)
-            
         
             
         if Regenerar:
@@ -473,6 +465,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             Regenerar = True
 
          
+        if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+            Regenerar = True
+            
             
             
                
@@ -530,6 +525,22 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               print "**** Motivo:" , why
             if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
                 print "Tabla Baselec encontrada."
+            elif options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+                # Generar comandos copy si se especifico
+                print "Cargando desde .dat"
+                primarykey = mparser.primary_key[0]
+                fields = ', '.join(mparser.basic_fields)
+                try:
+                    sql = "COPY %s (%s) FROM '/tmp/psqldiskcopy/%s.dat'" % (table, fields, table)
+                    qry = ddb.query(sql)
+                except:
+                    print "Error al cargar datos."
+                    import traceback
+                    print traceback.format_exc()
+                    print "--------------"
+                    
+            
+            
             else:
                 if len(data)>200 or options.debug:
                     print "Regenerando tabla %s (%d filas)  ... " % (table, len(data))
@@ -596,6 +607,14 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                   print "No se pudo borrar la tabla de backup."
                   pass  
                    
+        if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+            # Generar comandos copy si se especifico
+            primarykey = mparser.primary_key[0]
+            fields = ', '.join(mparser.basic_fields)
+            
+            sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO '/tmp/psqldiskcopy/%s.dat'" % (fields, table, primarykey, table)
+            qry = ddb.query(sql)
+            
         # ************************************* BASELEC *****************************************
                 
         if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
