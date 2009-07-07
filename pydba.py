@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 #   encoding: UTF8
 import optparse
 
@@ -25,11 +26,15 @@ def main():
                         verbose=False,
                         debug=False,
                         full=False,
+                        diskcopy=False,
                         rebuildtables=False,
                         flscriptparser=False,
                         files_loaded=[],
                         modules={}
                         )
+    parser.add_option("--diskcopy", help="Copies all processed tables to /tmp/*.dat"
+                        ,dest="diskcopy", action="store_true")
+                        
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
                         

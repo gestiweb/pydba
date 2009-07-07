@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 #     encoding: UTF8
 
 # Fichero de parser de MTD y carga de tablas para PyDBa
@@ -426,6 +427,16 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if len(mparser.basic_fields)==0:
             # Si no hay campos que pasar, generamos la tabla de cero.
             Regenerar=True
+        
+        if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+            # Generar comandos copy si se especifico
+            primarykey = mparser.primary_key[0]
+            fields = ', '.join(mparser.basic_fields)
+            
+            sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO '/tmp/psqldiskcopy/%s.dat'" % (fields, table, primarykey, table)
+            qry = ddb.query(sql)
+            
+        
             
         if Regenerar:
             primarykey = None
