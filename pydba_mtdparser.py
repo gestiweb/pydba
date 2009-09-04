@@ -611,8 +611,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             # Generar comandos copy si se especifico
             primarykey = mparser.primary_key[0]
             fields = ', '.join(mparser.basic_fields)
+            f1 = open("/tmp/psqldiskcopy/%s.restore.sql" % table, "w")
+            f1.write("-- primary key: %s\n\n" % primarykey)
+            f1.write("COPY %s (%s) FROM '/tmp/psqldiskcopy/%s.dat'" % (table, fields, table))
+            f1.close()
             
             sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO '/tmp/psqldiskcopy/%s.dat'" % (fields, table, primarykey, table)
+            print "Copiando a disco %s . . . " % table
             qry = ddb.query(sql)
             
         # ************************************* BASELEC *****************************************
