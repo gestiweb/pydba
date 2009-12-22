@@ -2,7 +2,9 @@
 #   encoding: UTF8
 
 # Fichero de utilidades para PyDBa
-import sha
+#import sha
+import hashlib
+
 import pg       # depends - python-pygresql
 import _mysql   # depends - python-mysqldb
 import os       # permite la función os.join
@@ -81,7 +83,7 @@ def SHA1(text):
                     print line
                     return None
     
-    return sha.new(isotext).hexdigest();
+    return hashlib.sha1(isotext).hexdigest();
 
 
 
