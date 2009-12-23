@@ -8,6 +8,7 @@ import hashlib
 import pg       # depends - python-pygresql
 import _mysql   # depends - python-mysqldb
 import os       # permite la función os.join
+import getpass
 
 # Calcular extension de un fichero
 def f_ext(filename):
@@ -89,7 +90,25 @@ def SHA1(text):
 
 def dbconnect(options):
     if (not options.dpasswd):
-        options.dpasswd = raw_input("Password: ")
+        options.dpasswd = getpass.getpass("dPassword:")
+        
+    if (
+        options.ddriver == options.odriver and
+        options.dhost == options.ohost  and
+        options.dport == options.oport and
+        options.duser == options.ouser 
+        ):
+        options.opasswd = options.dpasswd 
+        options.samedatabase = True
+    else:
+        print "WARN: El servidor de destino no es el mismo que el de origen."
+        print options.ddriver , options.odriver 
+        print options.dhost ,options.ohost  
+        print options.dport ,options.oport
+        print options.duser ,options.ouser 
+        options.samedatabase = False
+            
+        #options.dpasswd = raw_input("Password: ")
     try:
         if (options.ddriver=='mysql'):
             cn = _mysql.connect(
@@ -134,7 +153,26 @@ def dbconnect(options):
 
 def odbconnect(options):
     if (not options.opasswd):
-        options.opasswd = raw_input("Password: ")
+        options.opasswd = getpass.getpass("oPassword:")
+        
+    if (
+        options.ddriver == options.odriver and
+        options.dhost == options.ohost  and
+        options.dport == options.oport and
+        options.duser == options.ouser 
+        ):
+        options.dpasswd = options.opasswd 
+        options.samedatabase = True
+    else:
+        print "WARN: El servidor de destino no es el mismo que el de origen."
+        print options.ddriver , options.odriver 
+        print options.dhost ,options.ohost  
+        print options.dport ,options.oport
+        print options.duser ,options.ouser 
+        options.samedatabase = False
+
+        
+        #options.opasswd = raw_input("Password: ")
     try:
         if (options.odriver=='mysql'):
             cn = _mysql.connect(

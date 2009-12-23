@@ -129,7 +129,6 @@ class MTDParser:
             tfield.null=True
             print "ERROR: Unknown null '%s' in Field %s.%s." % (str(field.null),table,name)
             
-
         if str(field.pk)=='false':
             tfield.pk=False
         elif str(field.pk)=='true':
@@ -138,6 +137,12 @@ class MTDParser:
         else:
             tfield.pk=False
             print "ERROR: Unknown pk '%s' in Field %s.%s." % (str(field.pk),table,name)
+        
+        if tfield.pk and tfield.null:
+            print "WARN: Field %s.%s is primary key and can't be null." % (table,name)
+            tfield.null = False
+            
+        
         
         if tfield.dtype=='character varying':
             tfield.length=int(str(field.length))
@@ -319,7 +324,9 @@ Tables={}
         
         
 def load_mtd(options,odb,ddb,table,mtd_parse):
-    
+    if options.verbose:
+        print "Analizando tabla %s . . ." % table
+    fail = False
     mtd=mtd_parse.root.tmd
     if table!=table.lower():
         print "ERROR: Table name '%s' has uppercaps" % table
@@ -351,6 +358,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         for column in aux_columns2:
             if not column['column_name'].islower():
                 column['column_name']+="_odb_uppercased"
+            column['pk']=False
             origin_tablefields.append(column['column_name'])
             origin_fielddata[column['column_name']]=column
             
@@ -359,121 +367,175 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     mparser=MTDParser()
     mparser.parse_mtd(mtd)
     Tables[table]=mparser
-    
     if len(tablefields)==0:
+        sql = """SELECT * from information_schema.tables 
+            WHERE table_schema = 'public' AND table_name ~ '^%s_[0-9]{12}[0-9a-f]{2}$'""" % table
+        qry_columns2=odb.query(sql)
+        aux_columns2=qry_columns2.dictresult()
+        if len(aux_columns2):
+            print "ERROR GRAVE: Ya existe un backup de la tabla %s pero la tabla no existe! Revise esto manualmente." % table
+            return False
+            
         if (options.debug):
             print "Creando tabla '%s' ..." % table
         create_table(ddb,table,mtd)
-    else:
-        Regenerar=options.rebuildtables
+        return True
+
+    # La tabla existe, hay que ver cómo la modificamos . . . 
+
+    qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
+    dict_otable_count = qry_otable_count.dictresult()
+    old_rows = int(dict_otable_count[0]["n"])
+    old_pkey = None
+    new_pkey = None
+    qry_columns3=odb.query("SELECT column_name from information_schema.key_column_usage"
+                " WHERE table_schema = 'public' AND table_name='%s' AND ordinal_position = 1" % table)
+
+    aux_columns3=qry_columns3.dictresult()
+    for column in aux_columns3:
+        old_pkey = column["column_name"]
         
-        for field in mtd.field:
-            name=str(field.name)
-            if not tablefields.has_key(name):
-                #print "warn: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
+
+    Regenerar=options.rebuildtables
+    old_fields = []
+    new_fields = []
+    
+    for field in mtd.field:
+        name=str(field.name)
+        mfield = mparser.field[name]
+        if mfield.pk: new_pkey = name
+        new_fields.append(name)
+        
+        if not tablefields.has_key(name):
+            if mfield.pk:
+                if options.verbose:
+                    print "Regenerar: La tabla '%s' ha cambiado de primary key de %s a %s! (con %d filas)" % (table,repr(old_pkey),repr(name),old_rows)
                 Regenerar=True
+                
+                #print "Abortando, no se puede regenerar esta tabla."
+                #return False
+                old_fields.append(old_pkey)
             else:
-              mfield = mparser.field[name]
-              
-              null=origin_fielddata[name]["is_nullable"]
-              if null=="YES": null=True
-              if null=="NO": null=False
-              
-              dtype=origin_fielddata[name]["data_type"]
-              mfielddtype = mfield.dtype
-              length=origin_fielddata[name]["character_maximum_length"]
-              if length == None: length = 0
-              if mfielddtype == "serial": mfielddtype = "integer"
-              if mfielddtype == "bool": mfielddtype = "boolean"
-              if dtype == "serial": dtype = "integer"
-              if dtype[:4] == "time": dtype = "time" 
-              
-              #print null, dtype, length
-              
-              if null != mfield.null and null == False: 
-                #print "warn: La columna '%s' en la tabla '%s' ha establecido null de %s a %s" % (name,table,null,mfield.null)
+                if options.verbose:
+                    print "Regenerar: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
                 Regenerar=True
-              
-              if dtype != mfielddtype: 
-                #print "warn: La columna '%s' en la tabla '%s' ha cambiado el tipo de datos de %s a %s" % (name,table,dtype,mfielddtype)
-                Regenerar=True
-              
-              if length != mfield.length: 
-                #print "warn: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
-                Regenerar=True
-              
-              
-              
-              #print origin_fielddata[name]
-            
-        if len(origin_tablefields)>0:
-            for field in reversed(mparser.basic_fields):
-                name=field
-                if not name in origin_tablefields:
-                    #print "ERROR: La base de datos de origien no tiene la columna '%s' en la tabla '%s'" % (name,table)
-                    try:
-                        mparser.basic_fields.remove(name)
-                    except:
-                        pass
+                default_value = "NULL"
+                
+                if not mfield.null:
+                    if mfield.dtype in ["serial","integer","boolean","smallint","double precision","bool"]:
+                        default_value = "0"
+                    elif mfield.dtype in ["character varying","text"]:
+                        default_value = "''"
+                    elif mfield.dtype in ["date"]:
+                        default_value = "'2001-01-01'"
+                    elif mfield.dtype in ["time"]:
+                        default_value = "'00:00:01'"
+                    else:
+                        default_value = "'0'"
+                    
+                    
+                
+                old_fields.append(default_value)
+                
         else:
-            #print "ERROR: La BD origien no tiene la tabla '%s'" % (table)
-            mparser.basic_fields=[]
-            #print "*****"
-            #for atr in dir(field):
-            #    if (atr[0]!='_'):
-            #        prin create_table(db,table,mtd)t "%s : '%s'" % (atr,getattr(field,atr))
+            old_fields.append(name)
+
+            null=origin_fielddata[name]["is_nullable"]
+            if null=="YES": null=True
+            if null=="NO": null=False
+
+            dtype=origin_fielddata[name]["data_type"]
+            mfielddtype = mfield.dtype
+            length=origin_fielddata[name]["character_maximum_length"]
             
+            if length == None: length = 0
+            if mfielddtype == "serial": mfielddtype = "integer"
+            if mfielddtype == "bool": mfielddtype = "boolean"
+            if dtype == "serial": dtype = "integer"
+            if dtype[:4] == "time": dtype = "time" 
+
+            #print null, dtype, length
+
+            if null != mfield.null and null == False: 
+                if options.verbose:
+                    print "Regenerar: La columna '%s' en la tabla '%s' ha establecido null de %s a %s" % (name,table,null,mfield.null)
+                Regenerar=True
+
+            if dtype != mfielddtype: 
+                if options.verbose:
+                    print "Regenerar: La columna '%s' en la tabla '%s' ha cambiado el tipo de datos de %s a %s" % (name,table,dtype,mfielddtype)
+                Regenerar=True
+
+            if length < mfield.length: 
+                if options.verbose:
+                    print "Regenerar: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
+                Regenerar=True
+
+            if length > mfield.length: 
+                mfield.length = length
+          
+          
+          
+          #print origin_fielddata[name]
         
-        if len(mparser.basic_fields)==0:
-            # Si no hay campos que pasar, generamos la tabla de cero.
-            Regenerar=True
+    if len(origin_tablefields)>0:
+        for field in reversed(mparser.basic_fields):
+            name=field
+            if not name in origin_tablefields:
+                #print "ERROR: La base de datos de origien no tiene la columna '%s' en la tabla '%s'" % (name,table)
+                try:
+                    mparser.basic_fields.remove(name)
+                except:
+                    pass
+    else:
+        #print "ERROR: La BD origien no tiene la tabla '%s'" % (table)
+        mparser.basic_fields=[]
+        #print "*****"
+        #for atr in dir(field):
+        #    if (atr[0]!='_'):
+        #        prin create_table(db,table,mtd)t "%s : '%s'" % (atr,getattr(field,atr))
+        
+    
+    if len(mparser.basic_fields)==0:
+        # Si no hay campos que pasar, generamos la tabla de cero.
+        Regenerar=True
+    
+    
+        
+    if Regenerar:
+        primarykey = None
+        for pkey in mparser.primary_key:
+            tfield=mparser.field[pkey]
+            primarykey = pkey
+
+        if not primarykey or not old_pkey:
+            print "*** ERROR: La tabla %s no tiene primarykey, no puede ser regenerada." % (table)
+            Regenerar = False
+
+    if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
+        print "Iniciando volcado de Baselec ****"
+        import sys
+        #sys.stdout.flush()
+        print "Vaciando tabla . . . "
+        sys.stdout.flush()
+        try:
+          ddb.query("DELETE FROM %s" % (table))
+        except:
+          print "No se pudo vaciar la tabla."
+          return
+        #print "done"
+        Regenerar = True
+
+     
+    if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+        Regenerar = True
         
         
-            
-        if Regenerar:
-            primarykey = None
-            for pkey in mparser.primary_key:
-                tfield=mparser.field[pkey]
-                primarykey = pkey
-
-            if primarykey:
-                sql = "SELECT  COUNT(%s) as n FROM %s" % (primarykey,table)
-                qry = ddb.query(sql)
-                filas = qry.dictresult() 
-                for fila in filas:
-                    c = int(fila["n"])
-                    if c>200000:
-                        print "*** ERROR: La tabla %s supera el límite de filas de PyDBA (>200.000) para regenerar tablas (%d filas). Se aborta rebuild." % (table,c)
-                        Regenerar = False
-
-            else:            
-                print "*** ERROR: La tabla %s no tiene primarykey, no puede ser regenerada." % (table)
-                Regenerar = False
-
-        if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
-            print "Iniciando volcado de Baselec ****"
-            import sys
-            #sys.stdout.flush()
-            print "Vaciando tabla . . . "
-            sys.stdout.flush()
-            try:
-              ddb.query("DELETE FROM %s" % (table))
-            except:
-              print "No se pudo vaciar la tabla."
-              return
-            #print "done"
-            Regenerar = True
-
-         
-        if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
-            Regenerar = True
-            
-            
-            
-               
-        if Regenerar:
-            print "Regenerando tabla %s" % table
-            
+        
+    if Regenerar:
+        try:       
+            print "Regenerando tabla %s (%d filas)" % (table,old_rows)
+            data = None
             # Borrar primero los índices (todos) que tiene la tabla:
             if False: # Anulado, porque es mejor hacer un DROP CASCADE
                 qry_indexes = ddb.query("""
@@ -487,15 +549,11 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 dt_indexes=qry_indexes.dictresult() 
                 for fila in dt_indexes:
                     ddb.query("DROP INDEX %s;" % fila['indice'])
-            
-            if len(mparser.basic_fields)>0:
-                data=export_table(options,ddb,table)
-            else:
-                data=None
+        
             import datetime, random
             now = datetime.datetime.now()
             nseed = random.randint(0,255)
-            
+        
             newnametable = "%s_%04d%02d%02d%02d%02d%02x" % (table,now.year,now.month,now.day,now.hour,now.minute, nseed)
             fail = False
             try:
@@ -520,7 +578,6 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             except:
               fail = True
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
-              import traceback
               why = traceback.format_exc()
               print "**** Motivo:" , why
             if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
@@ -535,321 +592,383 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     qry = ddb.query(sql)
                 except:
                     print "Error al cargar datos."
-                    import traceback
                     print traceback.format_exc()
                     print "--------------"
-                    
-            
-            
-            else:
-                if len(data)>200 or options.debug:
-                    print "Regenerando tabla %s (%d filas)  ... " % (table, len(data))
-    
-                log = auto_import_table(options,ddb,table,data,mparser.field, pkey = primarykey)
-                if options.debug:
-                    print "finalizo la insercion de %d filas en %s" % (len(data), table)
                 
-                if len(log):
-                    fail = True
-                    print "ERROR: No se pudieron crear %d filas en la tabla %s" % (len(log), table)
-                    print " **** Exite un backup de los datos originales en la tabla %s " % newnametable
-                    filelog = open("/tmp/%s.log.sql" % newnametable,"w")
-                    for line in log:
-                        try:
-                            why = line["*why*"]
-                            del line["*why*"]
-                            fields=[]
-                            values=[]
-                            for field,value in line.iteritems():
-                                if field[0]!='#' and field in mparser.field:
-                                    fields.append(field)
-                                    ivalue=sql_formatstring(value,mparser.field[field])
-                                    values.append(ivalue)
-                    
-                            sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
-                            print >> filelog , sql
-                        except:
-                            import traceback
-                            why = traceback.format_exc()
-                            print "**** Error al generar el sql de backup:" , why
-                        
-                        #print >> filelog , "/* motivo:"
-                        #print >> filelog , why
-                        #print >> filelog , "*/"
-                        
-                    filelog.close()
-                    print " **** Se ha guardado un registro en formato SQL con las filas que faltan por migrar en /tmp/%s.log.sql" % newnametable
-                        
-                rows1 = len(data)
-                rows2 = len(export_table(options,ddb,table))
-                if rows1 != rows2:
-                    print "ERROR: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se deshace el cambio." % (rows2,rows1)
-                    fail = True
-                
-            if fail:
-                try:
-                  ddb.query("ALTER TABLE %s RENAME TO %s_new;" % (table,newnametable))
-                except:
-                  print "No se pudo renombrar la tabla nueva."
-                  pass  
-
-                try:
-                  ddb.query("ALTER TABLE %s RENAME TO %s;" % (newnametable,table))
-                except:
-                  print "No se pudo renombrar la tabla."
-                  pass  
-                
-                return           
-            else:
-                try:
-                  ddb.query("DROP TABLE %s CASCADE;" % (newnametable))
-                except:
-                  print "No se pudo borrar la tabla de backup."
-                  pass  
-                   
-        if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
-            # Generar comandos copy si se especifico
-            primarykey = mparser.primary_key[0]
-            fields = ', '.join(mparser.basic_fields)
-            f1 = open("/tmp/psqldiskcopy/%s.restore.sql" % table, "w")
-            f1.write("-- primary key: %s\n\n" % primarykey)
-            f1.write("COPY %s (%s) FROM '/tmp/psqldiskcopy/%s.dat'" % (table, fields, table))
-            f1.close()
-            
-            sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO '/tmp/psqldiskcopy/%s.dat'" % (fields, table, primarykey, table)
-            print "Copiando a disco %s . . . " % table
-            qry = ddb.query(sql)
-            
-        # ************************************* BASELEC *****************************************
-                
-        if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
-            import datetime
-            
-            csv=open(options.loadbaselec,"r")
-            print "Contando lineas . . . "
-            sys.stdout.flush()
-            lineas = -1 # -1 debido a que la primera fila es la cabecera.
-            for csvline in csv:
-                lineas +=1
-            print "%d registros en el fichero. " % lineas
-            sys.stdout.flush()
-            csv.close()
-            
-            csv=open(options.loadbaselec,"r")
-
-            csvfields=csv.readline().split("\t")
-            for n,field in enumerate(csvfields):
-                field = field.replace(" ","")
-                field = field.lower()
-                field = field.replace("+","mas")
-                field = re.sub(r'[^a-z0-9]','',field)
-                if field in mparser.field:
-                  csvfields[n]=field
-                else:
-                  csvfields[n]="* " + field
-                
-                
-            data = []
-            to1 = 0
-
-            for csvline in csv:
-                csvreg = csvline.split("\t")
-                line = {}
-                for n, val in enumerate(csvreg):
-                    fieldname = csvfields[n]
-                    if fieldname[0]=="*": continue
-                    try:
-                        val=val.decode("cp1252")
-                        val=val.encode("utf8")
-                        
-                    except:
-                        val=None
-                    if mparser.field[fieldname].dtype == 'double precision':
-                        try:
-                            val = float(re.sub(r"[^0-9\.]",'',val))
-                        except:
-                            val = 0
-                    elif mparser.field[fieldname].dtype == 'date':
-                        try:
-                            dt = datetime.strptime(val, "%d/%m/%Y %H:%M:%S")
-                            val = dt.isoformat()
-                        except:
-                            val = None
-                    
-                    if val == "": val = None
-                    line[fieldname]=val
-                data.append(line)
-                to1 += 1
-                if len(data)>=1000:
-                    from1 = to1 - len(data)
-                    pfrom1 = from1 * 100.0 / lineas
-                    pto1 = to1 * 100.0 / lineas
-                    
-                    print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
-                    
-                    #sys.stdout.write('.')
-                    sys.stdout.flush()
-                    # print "Copiando registros %.1f%% - %.1f%% . . ." % (pfrom1, pto1)
-                    # auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
-                    import_table(options,ddb,table,data,mparser.field)
-                    data = []                              
-
-            from1 = to1 - len(data)
-            pfrom1 = from1 * 100.0 / lineas
-            pto1 = to1 * 100.0 / lineas
-
-            print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
-            import sys
-            sys.stdout.flush()
-            #auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
-            import_table(options,ddb,table,data,mparser.field)
-            data = []                              
-
-            csv.close()
-                            
-              
-              
-        # SINCRONIZACION MAESTRO>ESCLAVO      
-        if options.odb != options.ddb : # TODO: Aquí falta comparar también los puertos y IP's.
-            import sha
-            mparser.basic_fields.sort()
-            try:
-                origin_data=export_table(options,odb,table,mparser.basic_fields)
-            except:
-                print mparser.basic_fields
-                raise
-            origin_rows={}
-            dest_rows={}
-            update_rows={}
-            origin_fields=mparser.basic_fields
-            if len(origin_data)>0: origin_fields=origin_data[0].keys()
-            
-            if len(mparser.primary_key)==1:
-                pkey=mparser.primary_key[0]
-            else:
-                print "ERROR: La tabla %s no tiene PK o tiene más de uno! " % table
-            origin_fields.sort()
-            for row in origin_data:
-                row_hash=sha.new(repr(row)).hexdigest()
-                row['#hash']=row_hash
-                origin_rows[row[pkey]]=row
-            
-            dest_data=export_table(options,ddb,table,origin_fields)
-            for row in dest_data:
-                row_hash=sha.new(repr(row)).hexdigest()
-                row['#hash']=row_hash
-                if origin_rows.has_key(row[pkey]):
-                    if origin_rows[row[pkey]]['#hash']!=row_hash:
-                        update_rows[row[pkey]]={}
-                        for field,value in origin_rows[row[pkey]].iteritems():
-                            # value=origin_rows[row[pkey]][field]
-                            if value!=row[field]:
-                                update_rows[row[pkey]][field]=value
-                
-                    del origin_rows[row[pkey]]
-                else:
-                    dest_rows[row[pkey]]=row
-            
-            if len(origin_rows)>0 or len(dest_rows)>0 or len(update_rows)>0:
-                # Aplicar filtros aquí: ------
-                
-                # -----------------------------
-                
-                # Origin Row -> Insertar nueva fila;
-                for pk,row in origin_rows.iteritems():
-                    fields=[]
-                    values=[]
-                    try:
-                        for field,value in row.iteritems():
-                            if field[0]!='#':
-                                fields.append(field)
-                                ivalue=sql_formatstring(value,mparser.field[field])
-                                values.append(ivalue)
-                    
-                        sql="INSERT INTO %s (%s) VALUES(%s)" % (table, ", ".join(fields), ", ".join(values))
-                        try:
-                            ddb.query(sql)
-                        except:
-                            print "Error al ejecutar la SQL: " + sql
-                            raise
-                    except:
-                        print "Cannot insert: ", repr(row)
-                        raise
-                
-                # Dest Row -> Borrar fila;
-                for pk,row in dest_rows.iteritems():
-                    try:
-                        sql="DELETE FROM %s  WHERE %s = %s" % (table, pkey, sql_formatstring(pk,mparser.field[pkey]))
-                        try:
-                            ddb.query(sql)
-                        except:
-                            print "Error al ejecutar la SQL: " + sql
-                    except:
-                        print "Cannot delete: ",repr(row)
-                        raise
-                
-                
-                # Update Rows -> Actualizar fila;
-                for pk,row in update_rows.iteritems():
-                    values=[]
-                    try:
-                        for field,value in row.iteritems():
-                            if field[0]!='#':
-                                ivalue=sql_formatstring(value,mparser.field[field])
-                                values.append("%s = %s" % (field,ivalue))
-                    
-                        sql="UPDATE %s SET %s WHERE %s = %s" % (table, ", ".join(values), pkey, sql_formatstring(pk,mparser.field[pkey]))
-                        try:
-                            ddb.query(sql)
-                        except:
-                            print "Error al ejecutar la SQL: " + sql
-                    except:
-                        print "Cannot update: ",repr(row)
-                        raise
-                
-                
-                print  table, len(origin_rows),len(dest_rows),len(update_rows)
-              
-        import random
-        try:
-            for pkey in mparser.primary_key:
-                tfield=mparser.field[pkey]
-                if tfield.dtype=='serial':
-                    qry_serial=ddb.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
-                    dr_serial=qry_serial.dictresult()
-                    for dserial in dr_serial:
-                        serial=dserial['serial']
-                        if serial:
-                            desired_serial = "%s_%s_seq" % (table, tfield.name)
-                            if serial != "public." + desired_serial:
-                                print "WARNING: Sequence does not match desired name: %s != %s " % (serial, desired_serial)
-                                try:
-                                    # ALTER SEQUENCE - RENAME TO - solo esta disponible  a partir de psql 8.3
-                                    # ALTER TABLE - RENAME TO - es compatible y funciona desde 8.0 o antes
-                                    qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (desired_serial, desired_serial+str(random.randint(100,100000))))
-                                except:
-                                    pass
-                                try:
-                                    qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (serial, desired_serial))
-                                    serial = desired_serial
-                                    print "INFO: Sequence renamed succefully to %s " % serial
-                                except:
-                                    pass
-                                    
-                                
-                            qry_maxserial=ddb.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
-                            max_serial=1
-                            dr_maxserial=qry_maxserial.dictresult()
-                            for dmaxserial in dr_maxserial:
-                                if dmaxserial['max']:
-                                    max_serial=dmaxserial['max']+1
         
-                            ddb.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
+        
+            else:
+                sqlDict = {
+                    "new_table" : table,
+                    "old_table" : newnametable,
+                    "new_fields" : ",".join(new_fields),
+                    "old_fields" : ",".join(old_fields),
+                }
+            
+                sql = """INSERT INTO %(new_table)s (%(new_fields)s) 
+                    SELECT %(old_fields)s FROM %(old_table)s ;
+                """ % sqlDict
+                fail1 = False
+                try:
+                    ddb.query(sql)
+                except:
+                    fail1 = True
+                    print "Error al intentar regenerar por SQL la tabla %s:" % table
+                    print traceback.format_exc()
+                    print "Se intentará hacer manualmente."
+            
+                if not fail1:
+                    try:
+                        rows1 = old_rows
+                        qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
+                        dict_otable_count = qry_otable_count.dictresult()
+                        new_rows = int(dict_otable_count[0]["n"])
+                        rows2 = new_rows
+                    except:
+                        print "Error al calcular el tamaño de las tablas."
+                        print traceback.format_exc()
+                        fail1 = True
+            
+                    if rows1 != rows2:
+                        print "WARN: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se intentará manualmente." % (rows2,rows1)
+                        fail1 = True
+            
+                
+                if fail1:
+            
+                    try:
+                        data=export_table(options,ddb,newnametable,"*",old_pkey,new_pkey)
+                    except:
+                        fail = True
+        
+                    if old_rows>200 or options.debug:
+                        print "Regenerando tabla %s (%d filas)  ... " % (table, old_rows)
+                    try:
+                        log = auto_import_table(options,ddb,table,data,mparser.field, pkey = primarykey)
+                    except:
+                        fail = True
+                        print traceback.format_exc()
+            
+                    del data # borrar datos para no acumularlos en memoria!
+
+                    if options.debug:
+                        print "finalizo la insercion de %d filas en %s" % (old_rows, table)
+            
+                    if len(log):
+                        fail = True
+                        print "ERROR: No se pudieron crear %d filas en la tabla %s" % (len(log), table)
+                        print " **** Exite un backup de los datos originales en la tabla %s " % newnametable
+                        filelog = open("/tmp/%s.log.sql" % newnametable,"w")
+                        for line in log:
+                            try:
+                                why = line["*why*"]
+                                del line["*why*"]
+                                fields=[]
+                                values=[]
+                                for field,value in line.iteritems():
+                                    if field[0]!='#' and field in mparser.field:
+                                        fields.append(field)
+                                        ivalue=sql_formatstring(value,mparser.field[field])
+                                        values.append(ivalue)
+                
+                                sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
+                                print >> filelog , sql
+                            except:
+                                why = traceback.format_exc()
+                                print "**** Error al generar el sql de backup:" , why
+                    
+                            #print >> filelog , "/* motivo:"
+                            #print >> filelog , why
+                            #print >> filelog , "*/"
+                    
+                        filelog.close()
+                        print " **** Se ha guardado un registro en formato SQL con las filas que faltan por migrar en /tmp/%s.log.sql" % newnametable
+                    
+                    try:
+                        rows1 = old_rows
+                        qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
+                        dict_otable_count = qry_otable_count.dictresult()
+                        new_rows = int(dict_otable_count[0]["n"])
+                        rows2 = new_rows
+                    except:
+                        print "Error al calcular el tamaño de las tablas."
+                        print traceback.format_exc()
+                        fail = True
+            
+                    if rows1 != rows2:
+                        print "ERROR: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se deshace el cambio." % (rows2,rows1)
+                        fail = True
         except:
-            print "PKeys: %s" % mparser.primary_key
-            raise
-                
+            print "Error INESPERADO regenerando tabla: %s" % table
+            print traceback.format_exc()
+            fail = True
         
+            
+        if fail:
+            try:
+              ddb.query("ALTER TABLE %s RENAME TO %s_new;" % (table,newnametable))
+            except:
+              print "No se pudo renombrar la tabla nueva."
+              pass  
+
+            try:
+              ddb.query("ALTER TABLE %s RENAME TO %s;" % (newnametable,table))
+            except:
+              print "No se pudo renombrar la tabla."
+              pass  
+            
+            return           
+        else:
+            try:
+              ddb.query("DROP TABLE %s CASCADE;" % (newnametable))
+              ddb.query("VACUUM ANALYZE %s;" % (table))
+            except:
+              print "No se pudo borrar la tabla de backup."
+              pass  
+               
+    if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+        # Generar comandos copy si se especifico
+        primarykey = mparser.primary_key[0]
+        fields = ', '.join(mparser.basic_fields)
+        f1 = open("/tmp/psqldiskcopy/%s.restore.sql" % table, "w")
+        f1.write("-- primary key: %s\n\n" % primarykey)
+        f1.write("COPY %s (%s) FROM '/tmp/psqldiskcopy/%s.dat'" % (table, fields, table))
+        f1.close()
+        
+        sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO '/tmp/psqldiskcopy/%s.dat'" % (fields, table, primarykey, table)
+        print "Copiando a disco %s . . . " % table
+        qry = ddb.query(sql)
+        
+    # ************************************* BASELEC *****************************************
+            
+    if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
+        import datetime
+        
+        csv=open(options.loadbaselec,"r")
+        print "Contando lineas . . . "
+        sys.stdout.flush()
+        lineas = -1 # -1 debido a que la primera fila es la cabecera.
+        for csvline in csv:
+            lineas +=1
+        print "%d registros en el fichero. " % lineas
+        sys.stdout.flush()
+        csv.close()
+        
+        csv=open(options.loadbaselec,"r")
+
+        csvfields=csv.readline().split("\t")
+        for n,field in enumerate(csvfields):
+            field = field.replace(" ","")
+            field = field.lower()
+            field = field.replace("+","mas")
+            field = re.sub(r'[^a-z0-9]','',field)
+            if field in mparser.field:
+              csvfields[n]=field
+            else:
+              csvfields[n]="* " + field
+            
+            
+        data = []
+        to1 = 0
+
+        for csvline in csv:
+            csvreg = csvline.split("\t")
+            line = {}
+            for n, val in enumerate(csvreg):
+                fieldname = csvfields[n]
+                if fieldname[0]=="*": continue
+                try:
+                    val=val.decode("cp1252")
+                    val=val.encode("utf8")
+                    
+                except:
+                    val=None
+                if mparser.field[fieldname].dtype == 'double precision':
+                    try:
+                        val = float(re.sub(r"[^0-9\.]",'',val))
+                    except:
+                        val = 0
+                elif mparser.field[fieldname].dtype == 'date':
+                    try:
+                        dt = datetime.strptime(val, "%d/%m/%Y %H:%M:%S")
+                        val = dt.isoformat()
+                    except:
+                        val = None
+                
+                if val == "": val = None
+                line[fieldname]=val
+            data.append(line)
+            to1 += 1
+            if len(data)>=1000:
+                from1 = to1 - len(data)
+                pfrom1 = from1 * 100.0 / lineas
+                pto1 = to1 * 100.0 / lineas
+                
+                print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
+                
+                #sys.stdout.write('.')
+                sys.stdout.flush()
+                # print "Copiando registros %.1f%% - %.1f%% . . ." % (pfrom1, pto1)
+                # auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+                import_table(options,ddb,table,data,mparser.field)
+                data = []                              
+
+        from1 = to1 - len(data)
+        pfrom1 = from1 * 100.0 / lineas
+        pto1 = to1 * 100.0 / lineas
+
+        print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
+        import sys
+        sys.stdout.flush()
+        #auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
+        import_table(options,ddb,table,data,mparser.field)
+        data = []                              
+
+        csv.close()
+                        
+          
+          
+    # SINCRONIZACION MAESTRO>ESCLAVO      
+    if options.odb != options.ddb : # TODO: Aquí falta comparar también los puertos y IP's.
+        import sha
+        mparser.basic_fields.sort()
+        try:
+            origin_data=export_table(options,odb,table,mparser.basic_fields)
+        except:
+            print mparser.basic_fields
+            raise
+        origin_rows={}
+        dest_rows={}
+        update_rows={}
+        origin_fields=mparser.basic_fields
+        if len(origin_data)>0: origin_fields=origin_data[0].keys()
+        
+        if len(mparser.primary_key)==1:
+            pkey=mparser.primary_key[0]
+        else:
+            print "ERROR: La tabla %s no tiene PK o tiene más de uno! " % table
+        origin_fields.sort()
+        for row in origin_data:
+            row_hash=sha.new(repr(row)).hexdigest()
+            row['#hash']=row_hash
+            origin_rows[row[pkey]]=row
+        
+        dest_data=export_table(options,ddb,table,origin_fields)
+        for row in dest_data:
+            row_hash=sha.new(repr(row)).hexdigest()
+            row['#hash']=row_hash
+            if origin_rows.has_key(row[pkey]):
+                if origin_rows[row[pkey]]['#hash']!=row_hash:
+                    update_rows[row[pkey]]={}
+                    for field,value in origin_rows[row[pkey]].iteritems():
+                        # value=origin_rows[row[pkey]][field]
+                        if value!=row[field]:
+                            update_rows[row[pkey]][field]=value
+            
+                del origin_rows[row[pkey]]
+            else:
+                dest_rows[row[pkey]]=row
+        
+        if len(origin_rows)>0 or len(dest_rows)>0 or len(update_rows)>0:
+            # Aplicar filtros aquí: ------
+            
+            # -----------------------------
+            
+            # Origin Row -> Insertar nueva fila;
+            for pk,row in origin_rows.iteritems():
+                fields=[]
+                values=[]
+                try:
+                    for field,value in row.iteritems():
+                        if field[0]!='#':
+                            fields.append(field)
+                            ivalue=sql_formatstring(value,mparser.field[field])
+                            values.append(ivalue)
+                
+                    sql="INSERT INTO %s (%s) VALUES(%s)" % (table, ", ".join(fields), ", ".join(values))
+                    try:
+                        ddb.query(sql)
+                    except:
+                        print "Error al ejecutar la SQL: " + sql
+                        raise
+                except:
+                    print "Cannot insert: ", repr(row)
+                    raise
+            
+            # Dest Row -> Borrar fila;
+            for pk,row in dest_rows.iteritems():
+                try:
+                    sql="DELETE FROM %s  WHERE %s = %s" % (table, pkey, sql_formatstring(pk,mparser.field[pkey]))
+                    try:
+                        ddb.query(sql)
+                    except:
+                        print "Error al ejecutar la SQL: " + sql
+                except:
+                    print "Cannot delete: ",repr(row)
+                    raise
+            
+            
+            # Update Rows -> Actualizar fila;
+            for pk,row in update_rows.iteritems():
+                values=[]
+                try:
+                    for field,value in row.iteritems():
+                        if field[0]!='#':
+                            ivalue=sql_formatstring(value,mparser.field[field])
+                            values.append("%s = %s" % (field,ivalue))
+                
+                    sql="UPDATE %s SET %s WHERE %s = %s" % (table, ", ".join(values), pkey, sql_formatstring(pk,mparser.field[pkey]))
+                    try:
+                        ddb.query(sql)
+                    except:
+                        print "Error al ejecutar la SQL: " + sql
+                except:
+                    print "Cannot update: ",repr(row)
+                    raise
+            
+            
+            print  table, len(origin_rows),len(dest_rows),len(update_rows)
+          
+    import random
+    try:
+        for pkey in mparser.primary_key:
+            tfield=mparser.field[pkey]
+            if tfield.dtype=='serial':
+                qry_serial=ddb.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
+                dr_serial=qry_serial.dictresult()
+                for dserial in dr_serial:
+                    serial=dserial['serial']
+                    if serial:
+                        desired_serial = "%s_%s_seq" % (table, tfield.name)
+                        if serial != "public." + desired_serial:
+                            print "WARNING: Sequence does not match desired name: %s != %s " % (serial, desired_serial)
+                            try:
+                                # ALTER SEQUENCE - RENAME TO - solo esta disponible  a partir de psql 8.3
+                                # ALTER TABLE - RENAME TO - es compatible y funciona desde 8.0 o antes
+                                qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (desired_serial, desired_serial+str(random.randint(100,100000))))
+                            except:
+                                pass
+                            try:
+                                qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (serial, desired_serial))
+                                serial = desired_serial
+                                print "INFO: Sequence renamed succefully to %s " % serial
+                            except:
+                                pass
+                                
+                            
+                        qry_maxserial=ddb.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
+                        max_serial=1
+                        dr_maxserial=qry_maxserial.dictresult()
+                        for dmaxserial in dr_maxserial:
+                            if dmaxserial['max']:
+                                max_serial=dmaxserial['max']+1
+    
+                        ddb.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
+    except:
+        print "PKeys: %s" % mparser.primary_key
+        raise
+                
+    return (not fail)
         
 # Comprobar Primary Keys en una tabla:
 # SELECT * FROM information_schema.constraint_table_usage WHERE table_name='articulos'
@@ -875,12 +994,17 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
 #   RESTART WITH 8;
         
 
-def export_table(options,db,table, fields=['*']):
+def export_table(options,db,table, fields=['*'], old_pkey = None, new_pkey = None):
     filas=None
     try:
         sql = "SELECT " + ",".join(fields) + " FROM %s" % table
         qry = db.query(sql)
         filas = qry.dictresult() 
+        if old_pkey and new_pkey:
+            if old_pkey != new_pkey:
+                for row in filas:
+                    row[new_pkey] = row[old_pkey]
+            
     except:
         print sql
         raise
@@ -888,10 +1012,13 @@ def export_table(options,db,table, fields=['*']):
 
 def auto_import_table(options,ddb,table,data,mparser_field,pkey):
     sz = len(data)
+    #print "Autoimport",table, sz
     if sz == 0: return [];
     
-    if sz > 800:
-        half = 200
+    if sz > 100:
+        half = 50
+        if sz > 500: half *= 2
+        if sz > 1000: half *= 2
         if sz > 5000: half *= 2
         if sz > 25000: half *= 2
         
@@ -910,9 +1037,11 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
                 
             log += auto_import_table(options,ddb,table,data[lh:rh],mparser_field, pkey)
             lh = rh
-
-        print 
+        if half == 50:  print "|",
+        elif half == 100:  print "|"
+        elif half > 100:  print "$"
         
+        del data
         
         return log
     
@@ -921,7 +1050,7 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
         import_table(options,ddb,table,data,mparser_field)
     except:
         pass
-        
+
     lst_filas = []
     for fila in data:
         lst_filas.append("'" + pg.escape_string(str(fila[pkey])) + "'")
@@ -987,7 +1116,9 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
             line["*why*"] = why
             
         log = data
+    del newdata
 
+    del data
     return log
         
     
@@ -1079,7 +1210,8 @@ def import_table(options,db,table,data,nfields):
             db.endcopy()
             sqlarray=[]
             
-
+    del data
+    
     sql_text="COPY %(tabla)s (%(fields)s) FROM stdin;" % sqlvar
     db.query(sql_text)
     for line in sqlarray:

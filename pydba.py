@@ -138,6 +138,7 @@ def main():
     if options.loadini: 
         exec_ini(options, options.loadini)
      
+    if options.ddriver and not options.odriver: options.odriver=options.ddriver
     if options.dhost and not options.ohost: options.ohost=options.dhost
     if options.duser and not options.ouser: options.ouser=options.duser
     if options.dpasswd and not options.opasswd: options.opasswd=options.dpasswd

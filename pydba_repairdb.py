@@ -14,6 +14,8 @@ from exmlparser import XMLParser
     
     
 def repair_db(options,ddb=None,mode=0,odb=None):
+    if (options.verbose):
+        print "-> RepairDB"
     if (not ddb):
         if (not options.ddb):
             print "RepairDB requiere una base de datos de destino y no proporcionó ninguna."
@@ -33,7 +35,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     where=""
     if not options.full :
         #if len(options.files_loaded)>0:
-        where+=" AND nombre IN ('" + "','".join(options.files_loaded) + "')"
+        where+=" AND (nombre IN ('" + "','".join(options.files_loaded) + "' ) OR nombre LIKE '%.mtd')"
           
         if len(options.modules)>0:
             where+=" AND ( 0=1 "
@@ -55,7 +57,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
                     where+=" OR ( idmodulo = '%s' AND nombre NOT IN ('" % modname + "','".join(noloadtable) + "'))" 
                 else:
                     where+=" OR ( idmodulo = '%s' AND nombre IN ('" % modname + "','".join(loadtable) + "'))" 
-            where+=")"
+            where+=" OR nombre LIKE '%.mtd' )"
                        
         if options.odb!=options.ddb:
             where+=" AND nombre LIKE '%.mtd'"
@@ -107,12 +109,14 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         
         
     
-    
-    qry_modulos=ddb.query("SELECT idmodulo, nombre, contenido, sha " +
+    sqlModulos = ("SELECT idmodulo, nombre, contenido, sha " +
                     "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' "
-                    + where + " ORDER BY idmodulo, nombre");
+                    + where + " ORDER BY idmodulo, nombre")
+    # print sqlModulos
+    qry_modulos=ddb.query(sqlModulos);
                                 
     modulos=qry_modulos.dictresult() 
+    # print "%d resultados." % len(modulos)
     sql=""
     resha1="";
     xmlfiles=("xml","ui","qry","kut","mtd","ts")
@@ -149,16 +153,20 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             qry_modulos=ddb.query("SELECT xml FROM flmetadata WHERE tabla='%s'" % tabla);
             tablas=qry_modulos.dictresult() 
             TablaCargada=False
+            sql_update_metadata = ""
             for txml in tablas:
                 TablaCargada=True
-                if txml['xml']!=sha1:
-                    sql+="UPDATE flmetadata SET xml='%s' WHERE tabla='%s';\n" % (sha1,tabla)
+                if txml['xml']!=sha1 or options.full:
+                    sql_update_metadata="UPDATE flmetadata SET xml='%s' WHERE tabla='%s';\n" % (sha1,tabla)
             if not TablaCargada:
                     print "Cargando tabla nueva %s ..." % tabla
-                    sql+=("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
+                    sql_update_metadata= ("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
                         " VALUES('%s','f','0','%s');\n" % (tabla,sha1))
             if xml:
-                load_mtd(options,odb,ddb,tabla,xml)
+                if sql_update_metadata and load_mtd(options,odb,ddb,tabla,xml):
+                    if options.verbose:
+                        print "Actualizando metadata para %s" % tabla
+                    ddb.query(sql_update_metadata)
                 
         if (len(sql)>1024):
             ddb.query(sql)

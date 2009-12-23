@@ -23,9 +23,11 @@ def load_module(options,db=None, preparse=False):
         db=dbconnect(options)
         if (not db): 
             return 0
-    
+    if options.verbose:
+        print " -> LoadModule"
     modules=[]
     dirs2={}
+    mod_filenames = []
     for root, dirs, files in os.walk(options.loaddir):
         FoundModule=False
         dirs2[root]=root
@@ -36,6 +38,12 @@ def load_module(options,db=None, preparse=False):
                 FoundModule=True
                 if options.verbose:
                     print "Found module '%s' at '%s'" % (name, root)
+                try:
+                    assert (name not in mod_filenames)
+                except:
+                    print "ERROR FATAL: Encontré dos veces el mismo módulo. ¡revise que está cargando la carpeta adecuada!"
+                    raise
+                mod_filenames += [name]
                 modules+=[root]
                 
         delindex=[]                
@@ -63,10 +71,18 @@ def load_module(options,db=None, preparse=False):
     else:
         if (not options.quiet):
             print "%d modules found." % len(modules)
-        
+
+    options.sha_allowed_files = set([])
+    options.filenames_allowed_files = set([])
     options.modules_loaded={}
     for module in modules:
         load_module_loadone(options,module,db,preparse)
+        
+    sql="DELETE FROM flfiles WHERE sha NOT IN ('%s');\n" % "', '".join(options.sha_allowed_files)
+    db.query(sql)
+    
+    sql="DELETE FROM flfiles WHERE nombre NOT IN ('%s');\n" % "', '".join(options.filenames_allowed_files)
+    db.query(sql)
     
     if (not options.quiet):
         print "* done"
@@ -93,7 +109,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
     files=[]
     pd = shelve.open("/tmp/pydba") # open -- file may get suffix added by low-level lib
                           
-
+    
     for root, dirs, walk_files in os.walk(modpath):
             for name in walk_files:
                 fname = os.path.join(root, name)
@@ -127,8 +143,9 @@ def load_module_loadone(options,modpath,db, preparse=False):
                     if loadFile:                    
                         sha=SHA1(contents_1)
                         pd[fname]={"mtime":mtime, "sha":sha, 'root' : root,'name' : name}
-                        
-                
+                    options.sha_allowed_files |= set([pd[fname]["sha"]])    
+                    options.filenames_allowed_files |= set([pd[fname]["name"]])    
+                    
                 if f_ext(name)=="qs" and loadFile==True and options.flscriptparser==True:
                     flscriptparser(root,name)              
                     
