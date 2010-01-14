@@ -422,8 +422,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 default_value = "NULL"
                 
                 if not mfield.null:
-                    if mfield.dtype in ["serial","integer","boolean","smallint","double precision","bool"]:
+                    if mfield.dtype in ["serial","integer","smallint","double precision"]:
                         default_value = "0"
+                    elif mfield.dtype in ["boolean","bool"]:
+                        default_value = "false"
                     elif mfield.dtype in ["character varying","text"]:
                         default_value = "''"
                     elif mfield.dtype in ["date"]:
