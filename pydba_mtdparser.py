@@ -49,6 +49,7 @@ class MTDParser:
         self.nonbasic_fields=[]
         self.primary_key=[]
         self.child_tables=[]
+        self.parent = None
         
     def check_field_attrs(self,field,table):
         tfield=MTDParser_data()
@@ -57,7 +58,7 @@ class MTDParser:
         if not hasattr(field,"name"):
             field.name='no_name'
             print "ERROR: Field name ommitted in MTD %s.%s" % (table,name)
-            
+        
         if not hasattr(field,"alias"):
             field.alias=str(field.name)
             print "ERROR: Field alias ommitted in MTD %s.%s" % (table,name)
@@ -80,6 +81,7 @@ class MTDParser:
                     field.length=str(maxlen+8)
                 else:
                     print "ERROR: Field length ommitted and %s.%s is string." % (table,name)
+        field.ck = getattr(field,"pk",'false')
                 
         if not hasattr(field,"pk"):
             field.pk='false'
@@ -110,6 +112,30 @@ class MTDParser:
                         self.child_tables.append({"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) })
                     else:
                         print "ERROR: Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
+                        
+        if hasattr(field,"freerelation"):
+            for relation in field.freerelation:
+                relation_is_ok=True
+                if not hasattr(relation,"table"):
+                    print "INFO: FREE Relation table ommited in Field %s.%s." % (table,name)
+                    relation_is_ok=False
+                if not hasattr(relation,"field"):
+                    print "INFO: FREE Relation field ommited in Field %s.%s." % (table,name)
+                    relation_is_ok=False
+                if not hasattr(relation,"card"):
+                    print "INFO: FREE Relation card ommited in Field %s.%s." % (table,name)
+                    relation_is_ok=False
+                if relation_is_ok:
+                    if str(relation.card)=="1M":
+                        tfield.has_relations_1m=True
+                    elif str(relation.card)=="M1":
+                        tfield.has_relations_m1=True
+                        # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
+                        rel = {"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) }
+                        self.child_tables.append(rel)
+                        print "relation", rel
+                    else:
+                        print "INFO: FREE Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
                                         
         tfield.name=str(field.name)
         tfield.alias=str(field.alias)
@@ -168,6 +194,7 @@ class MTDParser:
         self.primary_key=[]        
         self.child_tables=[]        
         self.name = mtd.name
+        self.parent = getattr(mtd,"parent",None)
         for field in mtd.field:
             tfield=self.check_field_attrs(field,mtd.name)
             self.field[tfield.name]=tfield
@@ -175,8 +202,7 @@ class MTDParser:
         
 
 # Crea una tabla según las especificaciones del MTD
-def create_table(db,table,mtd,existent_fields=[],oldtable=None):
-    existent_fields=set(existent_fields)
+def create_table(db,table,mtd,oldtable=None):
     txtfields=[]
     typetr={
         'string'    : 'character varying',
@@ -192,131 +218,148 @@ def create_table(db,table,mtd,existent_fields=[],oldtable=None):
     constraints=[]
     indexes=[]
     drops=[]
-    if len(existent_fields)>0:
-        mode="alter"
-    else:
-        mode="create"
-        
+    ck = []    
     for field in mtd.field:
-        if not str(field.name) in existent_fields:
-            row={}
-            row['name']=str(field.name)
-            if hasattr(field,"type_"):
-                row['type']=str(getattr(field,"type_"))
-            else:
-                print("ERROR: No se encontró tipo de datos para "
-                        "%s.%s - se asume int." % (table,str(field.name)))
-                row['type']="int"
-                
-            if typetr.has_key(row['type']):
-                row['type']=typetr[row['type']]
-                
-            if hasattr(field,"length") and row['type']=='character varying':
-                length=int(str(field.length))
-                if length==0:
-                    print "ERROR: Se encontró una longitud 0 para una columna string %s.%s" % (table, str(field.name))
-                    length=32
-                row['type']+="(%d)" % length
-            row['options']=""
+        row={}
+        unique_index = ""
+        row['name']=str(field.name)
+        field_ck = getattr(field,"ck",'false')
+        if field_ck == 'false': field_ck = False
+        if field_ck == 'true': field_ck = True
+        if type(field_ck) is str:
+            print("WARNING: %s.%s tiene un CK con valor desconocido %s " % (table,row['name'], field_ck))
+            field_ck = False
+        if field_ck:
+            ck.append(str(field.name))
             
-            if hasattr(field,"null"):
-                if str(field.null)=='false' and not hasattr(field,"calculated"):        
-                    row['options']+=" NOT NULL"
-                    
-                if str(field.null)=='true':        
-                    if row['type']=='serial':
-                        print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
-                    else:
-                        row['options']+=" NULL"
-            else:
+        if hasattr(field,"type_"):
+            row['type']=str(getattr(field,"type_"))
+        else:
+            print("ERROR: No se encontró tipo de datos para "
+                    "%s.%s - se asume int." % (table,str(field.name)))
+            row['type']="int"
+            
+        if typetr.has_key(row['type']):
+            row['type']=typetr[row['type']]
+            
+        if hasattr(field,"length") and row['type']=='character varying':
+            length=int(str(field.length))
+            if length==0:
+                print "ERROR: Se encontró una longitud 0 para una columna string %s.%s" % (table, str(field.name))
+                length=32
+            row['type']+="(%d)" % length
+        row['options']=""
+        
+        if hasattr(field,"null"):
+            if str(field.null)=='false' and not hasattr(field,"calculated"):        
+                row['options']+=" NOT NULL"
+                
+            if str(field.null)=='true':        
                 if row['type']=='serial':
                     print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
                 else:
                     row['options']+=" NULL"
+        else:
+            if row['type']=='serial':
+                print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
+            else:
+                row['options']+=" NULL"
+                        
+        if row['type']=='character varying':
+            index_adds="varchar_pattern_ops"
+        elif row['type']=='text':
+            index_adds="text_pattern_ops"
+        else:                    
+            index_adds=""
+        this_field_requires_index = False
+        
+        if hasattr(field,"pk"):
+            if str(field.pk)=='true':
+                this_field_requires_index = True
+                unique_index = " UNIQUE "
+                import random
+                rn = random.randint(100,999)
+                constraints+=["CONSTRAINT %s_pkey_%d PRIMARY KEY (%s)" % (table,rn,row['name'])]
+
+        if hasattr(field,"relation"):
+            this_field_requires_index = True
+            for relation in field.relation:
+                if not hasattr(relation,"card"):
+                    print("WARNING: %s.%s has one relation without "
+                            "'card' tag" % (table,row['name']))
+                #if hasattr(relation,"card"):
+                #    if str(relation.card)=='M1':
+                #        this_field_requires_index = True
+                #else:
+                #    print("WARNING: %s.%s has one relation without "
+                #            "'card' tag" % (table,row['name']))
                             
-            if row['type']=='character varying':
-                index_adds="text_pattern_ops"
-            else:                    
-                index_adds=""
-            
-            if hasattr(field,"pk"):
-                if str(field.pk)=='true':
-                    if mode=="create":
-                        #drops.append("DROP INDEX %s_%s_m1_idx CASCADE;" % (table,row['name']))
-                        #drops.append("DROP INDEX %s_%sup_m1_idx CASCADE;" % (table,row['name']))
-                        # if oldtable: drops.append("ALTER TABLE %s DROP CONSTRAINT %s_pkey CASCADE;" % (oldtable,table))
-                        indexes+=["CREATE INDEX %s_%s_m1_idx" 
-                                " ON %s USING btree (%s %s);" 
-                                % (table,row['name'],table,row['name'],index_adds)]
-                        indexes+=["CREATE INDEX %s_%sup_m1_idx" 
-                                " ON %s USING btree (upper(%s::text) %s);" 
-                                    % (table,row['name'],table,row['name'],index_adds)]
-                        import random
-                        rn = random.randint(100,999)
-                        constraints+=["CONSTRAINT %s_pkey_%d PRIMARY KEY (%s)" % (table,rn,row['name'])]
-                    else:
-                        print("ERROR: Cannot alter table to add '%s' as a primary key!."
-                                    " Delete table '%s' and try again." % (row['name'],table))
-            index_loaded=False
-            if hasattr(field,"relation"):
-                for relation in field.relation:
-                    if hasattr(relation,"card"):
-                        if str(relation.card)=='M1' and index_loaded==False:
-                            index_loaded=True
-                            #drops.append("DROP INDEX %s_%s_m1_idx CASCADE;" % (table,row['name']))
-                            #drops.append("DROP INDEX %s_%sup_m1_idx CASCADE;" % (table,row['name']))
-                            indexes+=["CREATE INDEX %s_%s_m1_idx" 
-                                    " ON %s USING btree (%s %s);" 
-                                    % (table,row['name'],table,row['name'],index_adds)]
-                            indexes+=["CREATE INDEX %s_%sup_m1_idx" 
-                                    " ON %s USING btree (upper(%s::text) %s);" 
-                                        % (table,row['name'],table,row['name'],index_adds)]
-                    else:
-                        print("WARNING: %s.%s has one relation without "
-                                "'card' tag" % (table,row['name']))
-                
-            txtfields+=["\"%(name)s\" %(type)s %(options)s" % row]
+        if this_field_requires_index:
+            indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
+                    % (unique_index,table,row['name'],table,row['name'])]
+            indexes+=["CREATE %s INDEX %s_%sup_m1_idx ON %s (upper(%s::text));" 
+                        % (unique_index,table,row['name'],table,row['name'])]
+            if index_adds:                                    
+                indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s %s);" 
+                        % (unique_index,table,row['name'],table,row['name'], index_adds)]
+        
+        txtfields+=["\"%(name)s\" %(type)s %(options)s" % row]
     
-    if mode=="create":
-        for drop in drops:
-            try:
-                db.query(drop)
-            except:
-                pass
-                #print "ERROR:", drop , " .. execution failed:"
-                #import sys
-                #traceback.print_exc(file=sys.stdout)
-                #print "-------"
-                
-        txtfields+=constraints
-        txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS;" % (table, ",\n".join(txtfields))
+    if len(ck):
+        if len(ck) > 6:
+            print "ERROR: (%s) no se puede crear un indice CK tan grande:" % table, ck
+        else:
+            composedfieldname = ", ".join(ck)
+            composedfieldname2 = "".join(ck)
+            indexes+=["CREATE UNIQUE INDEX %s_%s_m1_idx ON %s (%s);" 
+                    % (table,composedfieldname2,table,composedfieldname)]
+    
         
         
+    
+    for drop in drops:
         try:
-            db.query(txtcreate)
+            db.query(drop)
         except:
-            print txtcreate
-            raise            
-        
-        for index in indexes:
-            try:
-                split_index=index.split(" ")
-                index_name=split_index[2]
-                # Borrar primero el índice si existe
-                qry_indexes = db.query("""
-        SELECT pc2.relname as indice
-        FROM pg_class pc2 
-        WHERE pc2.relname = '%s'
-                """ % index_name)
-                dt_indexes=qry_indexes.dictresult() 
-                for fila in dt_indexes:
-                    db.query("DROP INDEX %s;" % fila['indice'])
-                
-                db.query(index)
-            except:
-                print index
-                import sys
-                traceback.print_exc(file=sys.stdout)
+            pass
+            #print "ERROR:", drop , " .. execution failed:"
+            #import sys
+            #traceback.print_exc(file=sys.stdout)
+            #print "-------"
+            
+    txtfields+=constraints
+    txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS;" % (table, ",\n".join(txtfields))
+    
+    
+    try:
+        db.query(txtcreate)
+    except:
+        print txtcreate
+        raise            
+    
+    for index in indexes:
+        try:
+            split_index=index.split(" ")
+            for indname in split_index:
+                if indname[:len(table)] == table and len(indname) > len(table):
+                    index_name=indname
+                    break
+            
+            # Borrar primero el índice si existe
+            qry_indexes = db.query("""
+    SELECT pc2.relname as indice
+    FROM pg_class pc2 
+    WHERE pc2.relname = '%s'
+            """ % index_name)
+            dt_indexes=qry_indexes.dictresult() 
+            for fila in dt_indexes:
+                db.query("DROP INDEX %s;" % fila['indice'])
+            
+            db.query(index)
+        except:
+            print index
+            import sys
+            traceback.print_exc(file=sys.stdout)
     
                 
         
@@ -1258,10 +1301,157 @@ def comprobarRelaciones():
               #print "warning: Imposible comparar %s -> %s" % (orig_fk,dest_pk)
             
             
+def procesarOLAP(db):
+    global Tables
+    print "Inicio del proceso de tablas para OLAP."
+    primarykeys=[]
+    tables_column0=[]
+    real_child_tables={}
+    for tablename,table in Tables.iteritems():
+        rchild_tables = {}
+        real_child_tables[tablename] = rchild_tables
+
+    for tablename,table in Tables.iteritems():
+        primarykey = None
+        
+        for pk in table.primary_key:
+            primarykey = pk
+            """
+        if tablename == 'lineasfacturascli':
+            table.child_tables.append({
+                    'table': 'albaranescli',
+                    'ntable':  'lineasfacturascli',
+                    'field': 'idalbaran',
+                    'nfield': 'idalbaran',
+                    })"""
+            
+        for child_table in table.child_tables:
+            ctablename = child_table['table']
+            primarykey2 = None
+            if ctablename not in Tables: continue 
+            
+            for pk in Tables[ctablename].primary_key:
+                primarykey2 = pk
+            if child_table['field']!=primarykey2: child_table['type']="weak"
+            else:  child_table['type']="strong"
+                #print "?", primarykey, primarykey2, child_table['field'], child_table['nfield']
+            
+            if ctablename in real_child_tables:
+                if tablename not in real_child_tables[ctablename]:
+                    real_child_tables[ctablename][tablename] = []
+                real_child_tables[ctablename][tablename].append(child_table)
+                
+            if tablename in real_child_tables:
+                if ctablename not in real_child_tables[tablename]:
+                    real_child_tables[tablename][ctablename] = []
+
+                reverse_child = {
+                    'table': child_table['ntable'],
+                    'ntable':  child_table['table'],
+                    'field': child_table['nfield'],
+                    'nfield': child_table['field'],
+                    'type': 'reverse',
+                    }
+                
+                real_child_tables[tablename][ctablename].append(reverse_child)
+        
+    for tablename,table in Tables.iteritems():
+        for pk in table.primary_key:
+            primarykeys.append("%s.%s" % (tablename ,pk))
+            
+        if 'column0' in table.field:
+            tables_column0.append(tablename)
+            
+    print "*** TABLAS ***"               
+    computarTablas(db,list(sorted(tables_column0)),real_child_tables,tables_column0)
+    print "=============="
+    
+def computarTablas(db,lstTablas,real_child_tables,tables_column0):
+    doctables = []
+    for table in sorted(lstTablas): 
+        estadistica = {0:0,1:0,2:0}
+        if table in tables_column0:
+            result = db.query("SELECT column0, COUNT(*) as cantidad FROM %s GROUP BY column0;" % table);
+        else:
+            result = db.query("SELECT 0 as column0, COUNT(*) as cantidad FROM %s;" % table);
+        for row in result.dictresult():
+            try:
+                column0 = int(row['column0'])
+            except TypeError:
+                column0 = 0
+            cantidad = row['cantidad']
+            estadistica[column0] = cantidad
+
+        print table, estadistica[0], estadistica[1], estadistica[2]
+        complejidad = 0
+        tipo = "general"
+        
+        for ctablename, lstrel in sorted(real_child_tables[table].iteritems()):
+            rtype = "weak"
+                
+            for rel in lstrel: 
+                if rel['type']=="strong":
+                    rtype = "strong"
+                    break
+                if rel['type']=="reverse":
+                    rtype = "reverse"
+                    
+            if re.match("lineas",ctablename): 
+                tipo = "documento"
+                rtype = "documento"
+                if ctablename not in doctables: doctables.append(ctablename)
+
+            if rtype == "reverse" and ctablename not in tables_column0 and rtype!="documento":           continue
+            if rtype == "reverse":
+                print " <<",
+            elif rtype == "weak":
+                print " ..",
+            elif ctablename == table:
+                print "@--",
+                complejidad+=5
+            elif ctablename in tables_column0:
+                print "*--",
+                complejidad+=20
+            elif ctablename in lstTablas:
+                print "?--",
+                complejidad+=10
+            elif rtype == "documento":
+                print "|--",
+                complejidad+=10
+            else:
+                print " --",
+                complejidad+=1
+                
+            estadistica2 = {0:0,1:0,2:0}
+            print ctablename,":",
+            for rel in lstrel:
+                field1 = rel['field']
+                field2 = rel['nfield']
+                print field1 , "->", field2, 
+                if table in tables_column0:
+                    result = db.query("SELECT t1.column0, COUNT(*) as cantidad FROM %s t1 INNER JOIN %s t2 ON t1.%s = t2.%s GROUP BY t1.column0;" % (table,ctablename,field1,field2));
+                else:
+                    result = db.query("SELECT 0 as column0, COUNT(*) as cantidad FROM %s t1 INNER JOIN %s t2 ON t1.%s = t2.%s;" % (table,ctablename,field1,field2));
+                for row in result.dictresult():
+                    try:
+                        column0 = int(row['column0'])
+                    except TypeError:
+                        column0 = 0
+                    cantidad = row['cantidad']
+                    estadistica2[column0] += cantidad
+                
+            print ";", estadistica2[0], estadistica2[1], estadistica2[2]
+        print "> %s (%d)" % (tipo, complejidad)
+        if len(real_child_tables[table]): print
+                
+    if len(doctables):
+        computarTablas(db,list(sorted(doctables)),real_child_tables,tables_column0)
+    
+            
     
   
 
-def procesarOLAP():
+def _procesarOLAP():
     global Tables
     print "Inicio del proceso de tablas para OLAP."
     primarykeys=[]
@@ -1273,6 +1463,10 @@ def procesarOLAP():
         table = Tables[tablename]
         for pk in table.primary_key:
             primarykeys.append("%s.%s" % (tablename ,pk))
+            
+        if 'column0' in table.field:
+            print tablename
+        
         
     for tablename in Tables:
         table = Tables[tablename]
@@ -1299,7 +1493,7 @@ def procesarOLAP():
     relations.sort()
     fk_relations.sort()
     table_nr.sort()
-    
+    print relations
     #for pk in primarykeys:
      #   print "Tabla sin heredadas %s" % (pk)
         

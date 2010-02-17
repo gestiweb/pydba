@@ -154,7 +154,7 @@ def main():
         repair_db(options,db)
     elif (options.action=="setup_olap"):
         db=load_module(options, preparse=True)
-        procesarOLAP()
+        procesarOLAP(db)
     elif (options.action=="check"):
         db=load_module(options, preparse=True)
         comprobarRelaciones()
