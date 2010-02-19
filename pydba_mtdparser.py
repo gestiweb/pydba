@@ -81,7 +81,8 @@ class MTDParser:
                     field.length=str(maxlen+8)
                 else:
                     print "ERROR: Field length ommitted and %s.%s is string." % (table,name)
-        field.ck = getattr(field,"pk",'false')
+        field.ck = getattr(field,"ck",'false')
+        #print "*CK",name, field.ck  
                 
         if not hasattr(field,"pk"):
             field.pk='false'
@@ -223,13 +224,20 @@ def create_table(db,table,mtd,oldtable=None):
         row={}
         unique_index = ""
         row['name']=str(field.name)
-        field_ck = getattr(field,"ck",'false')
-        if field_ck == 'false': field_ck = False
-        if field_ck == 'true': field_ck = True
+        field_ck = getattr(field,"ck",'None')
+        #print "CK %s.%s %s" % (table,row['name'],str(field.ck))
+        if re.match('false',field_ck, re.I): field_ck = False
+        elif re.match('true',field_ck, re.I): field_ck = True
+        else: 
+            print("WARNING: %s.%s tiene un CK con valor desconocido %s " % (table,row['name'], field_ck))
+            field_ck = False
+        
         if type(field_ck) is str:
             print("WARNING: %s.%s tiene un CK con valor desconocido %s " % (table,row['name'], field_ck))
             field_ck = False
         if field_ck:
+            print "CK %s.%s %s" % (table,row['name'],str(field.ck))
+            
             ck.append(str(field.name))
             
         if hasattr(field,"type_"):
@@ -1366,7 +1374,7 @@ def procesarOLAP(db):
     computarTablas(db,list(sorted(tables_column0)),real_child_tables,tables_column0)
     print "=============="
     
-def computarTablas(db,lstTablas,real_child_tables,tables_column0):
+def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = []):
     doctables = []
     for table in sorted(lstTablas): 
         estadistica = {0:0,1:0,2:0}
@@ -1443,9 +1451,10 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0):
             print ";", estadistica2[0], estadistica2[1], estadistica2[2]
         print "> %s (%d)" % (tipo, complejidad)
         if len(real_child_tables[table]): print
-                
+           
+    doctables = list(set(doctables) - set(seen_tables))
     if len(doctables):
-        computarTablas(db,list(sorted(doctables)),real_child_tables,tables_column0)
+        computarTablas(db,list(sorted(doctables)),real_child_tables,tables_column0, list(set(seen_tables) | set(lstTablas)))
     
             
     
