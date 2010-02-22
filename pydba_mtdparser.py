@@ -23,6 +23,7 @@ class MTDParser_data:
     pk=False
     has_relations_1m=False
     has_relations_m1=False
+    default=None
     
 
 class MTDParser:
@@ -134,7 +135,7 @@ class MTDParser:
                         # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
                         rel = {"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) }
                         self.child_tables.append(rel)
-                        print "relation", rel
+                        #print "relation", rel
                     else:
                         print "INFO: FREE Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
                                         
@@ -147,6 +148,11 @@ class MTDParser:
             tfield.dtype=self.typetr[str(field.type_)]
         
         
+        if hasattr(field,"default"):
+            tfield.default=field.default
+            if field.default == "false": field.default=False
+            if field.default == "true": field.default=True
+            #print tfield.name, "default:", tfield.default
         
         if str(field.null)=='false':
             tfield.null=False
@@ -226,17 +232,18 @@ def create_table(db,table,mtd,oldtable=None):
         row['name']=str(field.name)
         field_ck = getattr(field,"ck",'None')
         #print "CK %s.%s %s" % (table,row['name'],str(field.ck))
-        if re.match('false',field_ck, re.I): field_ck = False
-        elif re.match('true',field_ck, re.I): field_ck = True
-        else: 
-            print("WARNING: %s.%s tiene un CK con valor desconocido %s " % (table,row['name'], field_ck))
-            field_ck = False
+        if type(field_ck) is str:
+            if re.match('false',field_ck, re.I): field_ck = False
+            elif re.match('true',field_ck, re.I): field_ck = True
+            else: 
+                print("WARNING: %s.%s tiene un CK con valor desconocido %s " % (table,row['name'], field_ck))
+                field_ck = False
         
         if type(field_ck) is str:
             print("WARNING: %s.%s tiene un CK con valor desconocido %s " % (table,row['name'], field_ck))
             field_ck = False
         if field_ck:
-            print "CK %s.%s %s" % (table,row['name'],str(field.ck))
+            #print "CK %s.%s %s" % (table,row['name'],str(field.ck))
             
             ck.append(str(field.name))
             
@@ -258,20 +265,6 @@ def create_table(db,table,mtd,oldtable=None):
             row['type']+="(%d)" % length
         row['options']=""
         
-        if hasattr(field,"null"):
-            if str(field.null)=='false' and not hasattr(field,"calculated"):        
-                row['options']+=" NOT NULL"
-                
-            if str(field.null)=='true':        
-                if row['type']=='serial':
-                    print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
-                else:
-                    row['options']+=" NULL"
-        else:
-            if row['type']=='serial':
-                print "ERROR: Se encontró columna %s serial con NULL. Se omite." % str(field.name)
-            else:
-                row['options']+=" NULL"
                         
         if row['type']=='character varying':
             index_adds="varchar_pattern_ops"
@@ -289,6 +282,16 @@ def create_table(db,table,mtd,oldtable=None):
                 rn = random.randint(100,999)
                 constraints+=["CONSTRAINT %s_pkey_%d PRIMARY KEY (%s)" % (table,rn,row['name'])]
 
+        if hasattr(field,"unique"):
+            if str(field.unique)=='true':
+                this_field_requires_index = True
+                unique_index = " UNIQUE "
+            elif str(field.unique)=='false':
+                pass
+            else:
+                print("WARNING: %s.%s unkown 'unique' value: %s" % (table,row['name'],str(field.unique)))
+            
+                
         if hasattr(field,"relation"):
             this_field_requires_index = True
             for relation in field.relation:
@@ -305,11 +308,50 @@ def create_table(db,table,mtd,oldtable=None):
         if this_field_requires_index:
             indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
                     % (unique_index,table,row['name'],table,row['name'])]
-            indexes+=["CREATE %s INDEX %s_%sup_m1_idx ON %s (upper(%s::text));" 
-                        % (unique_index,table,row['name'],table,row['name'])]
+            indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text));" 
+                        % (table,row['name'],table,row['name'])]
             if index_adds:                                    
                 indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s %s);" 
                         % (unique_index,table,row['name'],table,row['name'], index_adds)]
+        calculated = None
+        if hasattr(field,"calculated"):
+            if str(field.calculated) == "true": calculated = True
+            elif str(field.calculated) == "false": calculated = False
+            else:
+                print("WARNING: %s.%s unkown 'calculated' value: '%s'" % (table,row['name'],str(field.calculated)))
+                calculated = False
+                
+                        
+        if not hasattr(field,"null"): canbenull = True
+        else: 
+            if str(field.null)=='false':   canbenull = False
+            elif str(field.null)=='true':  canbenull = True
+            else:
+                print("WARNING: %s.%s unkown 'null' value: %s " % (table,row['name'],str(field.null)))
+                canbenull = True
+                
+           
+        if (unique_index or field_ck) and calculated:
+            print "-- FATAL ERROR -- !!"
+            print("FATAL: %s.%s simultaneamente tiene propiedades UNIQUE (pk, ck, unique) y CALCULATED." % (table,row['name']))
+            print("-- Debe corregir esto e intentarlo de nuevo.")
+            sys.exit(1)
+            
+        if (unique_index or field_ck) and canbenull:
+            print "WARN: Si la columna %s es de algún modo única (pk,ck,unique), nunca puede admitir NULL." % str(field.name)
+            canbenull = False
+            
+                
+        if calculated and not canbenull:
+            print "INFO: Si la columna %s.%s es calculada, debe admitir NULL." % (table,str(field.name))
+            canbenull = True
+        
+        
+        if canbenull:
+            row['options']+=" NULL"
+        else:
+            row['options']+=" NOT NULL"
+        
         
         txtfields+=["\"%(name)s\" %(type)s %(options)s" % row]
     
@@ -1176,7 +1218,7 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
         
     
     
-def sql_formatstring(value,field,format='i'):
+def sql_formatstring(value,field,format='i', default=False):
     # Format:
     #  i - fomrato inserción o update
     #  c - formato COPY
@@ -1191,6 +1233,9 @@ def sql_formatstring(value,field,format='i'):
     cvalue=""
     if (value is not None):#Si el valor NO es nulo
         ivalue="'" + pg.escape_string(str(value)) + "'"
+        cvalue=copy_escapechars(value)
+    elif (default and field.default is not None):#Si el valor defecto NO es nulo
+        ivalue="'" + pg.escape_string(str(field.default)) + "'"
         cvalue=copy_escapechars(value)
     else:
         # ¿Permite null este campo o es Serial?
