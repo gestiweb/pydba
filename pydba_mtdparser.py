@@ -417,9 +417,13 @@ def create_table(db,table,mtd,oldtable=None):
         db.query(txtcreate)
     except:
         print txtcreate
-        raise            
-    
+        raise     
+               
+    return indexes
 
+
+
+def create_indexes(db,indexes,table):
     for index in indexes:
         try:
             split_index=index.split(" ")
@@ -509,7 +513,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
         if (options.debug):
             print "Creando tabla '%s' ..." % table
-        create_table(ddb,table,mtd)
+        idx = create_table(ddb,table,mtd)
+        create_indexes(ddb,idx,table)
         return True
 
     # La tabla existe, hay que ver cómo la modificamos . . . 
@@ -666,6 +671,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         
         
     if Regenerar:
+        indexes = []
         try:       
             print "Regenerando tabla %s (%d filas)" % (table,old_rows)
             data = None
@@ -707,7 +713,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     except:
                         pass
             try:
-              create_table(ddb,table,mtd,oldtable=newnametable)
+              indexes = create_table(ddb,table,mtd,oldtable=newnametable)
             except:
               fail = True
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
@@ -855,7 +861,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
             return           
         else:
+            
             try:
+              create_indexes(ddb,indexes, table)
               ddb.query("DROP TABLE %s CASCADE;" % (newnametable))
               ddb.query("VACUUM ANALYZE %s;" % (table))
             except:
