@@ -424,6 +424,7 @@ def create_table(db,table,mtd,oldtable=None):
 
 
 def create_indexes(db,indexes,table):
+    status = True
     for index in indexes:
         try:
             split_index=index.split(" ")
@@ -445,15 +446,17 @@ def create_indexes(db,indexes,table):
                 db.query(index)
             except:
                 print "Error al crear el índice!", index
+                status = False
                 import sys
                 traceback.print_exc(file=sys.stdout)
                 
         except:
+            status = False
             print index
             import sys
             traceback.print_exc(file=sys.stdout)
     
-                
+    return status                
         
 Tables={}        
         
@@ -554,10 +557,16 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             else:
                 if options.verbose:
                     print "Regenerar: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
-                Regenerar=True
-                default_value = "NULL"
+                if str(field.default):
+                    default_value = "'" + pg.escape_string(str(field.default)) + "'"
+                    if options.verbose:
+                        print "Asumiendo valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
+                else:            
+                    default_value = "NULL"
                 
-                if not mfield.null:
+                Regenerar=True
+                
+                if default_value == "NULL" and not mfield.null:
                     if mfield.dtype in ["serial","integer","smallint","double precision"]:
                         default_value = "0"
                     elif mfield.dtype in ["boolean","bool"]:
@@ -862,13 +871,21 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             return           
         else:
             
+            if not create_indexes(ddb,indexes, table): 
+              print "No se pudieron crear todos los indices."
+              fail = True
+              
             try:
-              create_indexes(ddb,indexes, table)
               ddb.query("DROP TABLE %s CASCADE;" % (newnametable))
-              ddb.query("VACUUM ANALYZE %s;" % (table))
             except:
               print "No se pudo borrar la tabla de backup."
-              pass  
+              fail = True
+              
+            try:
+              ddb.query("VACUUM ANALYZE %s;" % (table))
+            except:
+              print "No se pudo analizar la nueva tabla."
+              fail = True
                
     if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
         # Generar comandos copy si se especifico
@@ -1267,7 +1284,7 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
         
     
     
-def sql_formatstring(value,field,format='i', default=False):
+def sql_formatstring(value,field,format='i'):
     # Format:
     #  i - fomrato inserción o update
     #  c - formato COPY
@@ -1283,7 +1300,7 @@ def sql_formatstring(value,field,format='i', default=False):
     if (value is not None):#Si el valor NO es nulo
         ivalue="'" + pg.escape_string(str(value)) + "'"
         cvalue=copy_escapechars(value)
-    elif (default and field.default is not None):#Si el valor defecto NO es nulo
+    elif (field.null==False and str(field.default) is not None):#Si el valor defecto NO es nulo
         ivalue="'" + pg.escape_string(str(field.default)) + "'"
         cvalue=copy_escapechars(value)
     else:
@@ -1310,6 +1327,11 @@ def sql_formatstring(value,field,format='i', default=False):
     
     if format=='i': return ivalue
     if format=='c': return cvalue
+    
+    
+    
+    
+    
     
 def import_table(options,db,table,data,nfields):  
     if not len(data):
