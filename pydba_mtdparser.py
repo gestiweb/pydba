@@ -150,9 +150,12 @@ class MTDParser:
         
         if hasattr(field,"default"):
             tfield.default=field.default
-            if field.default == "false": field.default=False
-            if field.default == "true": field.default=True
+            #if field.default == "false": field.default=False
+            #if field.default == "true": field.default=True
             #print tfield.name, "default:", tfield.default
+        else:
+            tfield.default=None
+            
         
         if str(field.null)=='false':
             tfield.null=False
@@ -225,13 +228,19 @@ def create_table(db,table,mtd,oldtable=None):
     constraints=[]
     indexes=[]
     drops=[]
-    ck = []    
+    ck = [] 
     for field in mtd.field:
         row={}
         unique_index = ""
         row['name']=str(field.name)
         field_ck = getattr(field,"ck",'None')
+        ispkey = False
+        isunique = False
+        
         #print "CK %s.%s %s" % (table,row['name'],str(field.ck))
+        if type(field_ck) is list: 
+            field_ck = field_ck[0]
+            print "WARN: La columna %s.%s tiene repetido el apartado ''ck''." % (table,str(field.name))
         if type(field_ck) is str:
             if re.match('false',field_ck, re.I): field_ck = False
             elif re.match('true',field_ck, re.I): field_ck = True
@@ -275,17 +284,25 @@ def create_table(db,table,mtd,oldtable=None):
         this_field_requires_index = False
         
         if hasattr(field,"pk"):
+            if type(field.pk) is list: 
+                field.pk = field.pk[0]
+                print "WARN: La columna %s.%s tiene repetido el apartado ''pk''." % (table,str(field.name))
+                
             if str(field.pk)=='true':
+                ispkey = True
                 this_field_requires_index = True
                 unique_index = " UNIQUE "
                 import random
-                rn = random.randint(100,999)
-                constraints+=["CONSTRAINT %s_pkey_%d PRIMARY KEY (%s)" % (table,rn,row['name'])]
+                random.seed()
+                rn1 = random.randint(0,16**4)
+                rn2 = random.randint(0,16**4)                
+                constraints+=["CONSTRAINT %s_pkey_%04x%04x PRIMARY KEY (%s)" % (table,rn1,rn2,row['name'])]
 
         if hasattr(field,"unique"):
             if str(field.unique)=='true':
                 this_field_requires_index = True
                 unique_index = " UNIQUE "
+                isunique = True
             elif str(field.unique)=='false':
                 pass
             else:
@@ -331,20 +348,35 @@ def create_table(db,table,mtd,oldtable=None):
                 canbenull = True
                 
            
-        if (unique_index or field_ck) and calculated:
+        if (unique_index) and calculated:
             print "-- FATAL ERROR -- !!"
-            print("FATAL: %s.%s simultaneamente tiene propiedades UNIQUE (pk, ck, unique) y CALCULATED." % (table,row['name']))
+            print("FATAL: %s.%s simultaneamente tiene propiedades UNIQUE (pk, unique) y CALCULATED." % (table,row['name']))
             print("-- Debe corregir esto e intentarlo de nuevo.")
             sys.exit(1)
             
-        if (unique_index or field_ck) and canbenull:
-            print "WARN: Si la columna %s es de algún modo única (pk,ck,unique), nunca puede admitir NULL." % str(field.name)
+        if (unique_index) and canbenull:
+            print "WARN: Si la columna %s es de algún modo única (pk,unique), nunca puede admitir NULL." % str(field.name)
             canbenull = False
             
                 
         if calculated and not canbenull:
             print "INFO: Si la columna %s.%s es calculada, debe admitir NULL." % (table,str(field.name))
             canbenull = True
+            
+        if hasattr(field,"default"):
+            if type(field.default) is list: 
+                field.default = str(field.default[0])
+                print "WARN: La columna %s.%s tiene repetido el apartado ''default''." % (table,str(field.name))
+            else:
+                field.default = str(field.default)
+                
+            if field.default == 'null' : field.default = 'NULL'
+            elif field.default == 'true' : field.default = 'TRUE'
+            elif field.default == 'false' : field.default = 'FALSE'
+            else: field.default = "'%s'" % field.default
+            
+            
+            row['options']+=" DEFAULT "+field.default+" "
         
         
         if canbenull:
@@ -387,6 +419,7 @@ def create_table(db,table,mtd,oldtable=None):
         print txtcreate
         raise            
     
+
     for index in indexes:
         try:
             split_index=index.split(" ")
@@ -404,8 +437,13 @@ def create_table(db,table,mtd,oldtable=None):
             dt_indexes=qry_indexes.dictresult() 
             for fila in dt_indexes:
                 db.query("DROP INDEX %s;" % fila['indice'])
-            
-            db.query(index)
+            try:
+                db.query(index)
+            except:
+                print "Error al crear el índice!", index
+                import sys
+                traceback.print_exc(file=sys.stdout)
+                
         except:
             print index
             import sys
@@ -727,7 +765,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     if rows1 != rows2:
                         print "WARN: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se intentará manualmente." % (rows2,rows1)
                         fail1 = True
-            
+                
+                if fail1: 
+                    fail = True
+                    fail1 = False
                 
                 if fail1:
             
