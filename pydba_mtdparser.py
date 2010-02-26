@@ -573,7 +573,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             else:
                 if options.verbose:
                     print "Regenerar: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
-                if str(field.default):
+                if hasattr(field,"default") and str(field.default):
                     default_value = "'" + pg.escape_string(str(field.default)) + "'"
                     if options.verbose:
                         print "Asumiendo valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
