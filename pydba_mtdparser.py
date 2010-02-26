@@ -111,7 +111,9 @@ class MTDParser:
                     elif str(relation.card)=="M1":
                         tfield.has_relations_m1=True
                         # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
-                        self.child_tables.append({"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) })
+                        required = False
+                        if field.null == "false": required = True
+                        self.child_tables.append({"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) , "required" : required })
                     else:
                         print "ERROR: Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
                         
@@ -132,8 +134,11 @@ class MTDParser:
                         tfield.has_relations_1m=True
                     elif str(relation.card)=="M1":
                         tfield.has_relations_m1=True
+                        required = False
+                        if field.null == "false": required = True
+                        
                         # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
-                        rel = {"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) }
+                        rel = {"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) , "required" : required}
                         self.child_tables.append(rel)
                         #print "relation", rel
                     else:
@@ -229,7 +234,13 @@ def create_table(db,table,mtd,oldtable=None):
     indexes=[]
     drops=[]
     ck = [] 
+    fieldnames = []
     for field in mtd.field:
+        if str(field.name) in fieldnames:
+            print "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
+            raise NameError, "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
+        else:
+            fieldnames.append(str(field.name))
         row={}
         unique_index = ""
         row['name']=str(field.name)
@@ -516,8 +527,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
         if (options.debug):
             print "Creando tabla '%s' ..." % table
-        idx = create_table(ddb,table,mtd)
-        create_indexes(ddb,idx,table)
+        try:
+            idx = create_table(ddb,table,mtd)
+            create_indexes(ddb,idx,table)
+        except:
+            print "Error no esperado!"
+            print traceback.format_exc()
+            return False
         return True
 
     # La tabla existe, hay que ver cómo la modificamos . . . 
@@ -728,9 +744,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
               why = traceback.format_exc()
               print "**** Motivo:" , why
-            if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
+            if not fail and options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
                 print "Tabla Baselec encontrada."
-            elif options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+            elif not fail and options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
                 # Generar comandos copy si se especifico
                 print "Cargando desde .dat"
                 primarykey = mparser.primary_key[0]
@@ -745,7 +761,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 
         
         
-            else:
+            elif not fail:
                 sqlDict = {
                     "new_table" : table,
                     "old_table" : newnametable,
@@ -1475,6 +1491,7 @@ def procesarOLAP(db):
                     'field': child_table['nfield'],
                     'nfield': child_table['field'],
                     'type': 'reverse',
+                    'required': False,
                     }
                 
                 real_child_tables[tablename][ctablename].append(reverse_child)
@@ -1512,14 +1529,16 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = 
         
         for ctablename, lstrel in sorted(real_child_tables[table].iteritems()):
             rtype = "weak"
+            reltypes = set([])
                 
-            for rel in lstrel: 
-                if rel['type']=="strong":
-                    rtype = "strong"
-                    break
-                if rel['type']=="reverse":
-                    rtype = "reverse"
-                    
+            for rel in lstrel: reltypes|=set([rel['type']])
+            
+            if "required" in reltypes: rtype = "required"
+            elif "strong" in reltypes: rtype = "strong"
+            elif "reverse" in reltypes: rtype = "reverse"
+            
+            if "required" in reltypes: print ":",
+            
             if re.match("lineas",ctablename): 
                 tipo = "documento"
                 rtype = "documento"
