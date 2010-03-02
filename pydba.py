@@ -9,7 +9,7 @@ from pydba_repairdb import repair_db
 from pydba_createdb import create_db
 from pydba_execini import exec_ini
 
-import os 		# variables entorno
+import os, sys, traceback 		# variables entorno
 
 def main():
 
@@ -33,11 +33,11 @@ def main():
                         files_loaded=[],
                         modules={}
                         )
-    parser.add_option("--diskcopy", help="Copies all processed tables to /tmp/psqldiskcopy/*.dat"
+    parser.add_option("--diskcopy", help="Create a backup .pydbabackup"
                         ,dest="diskcopy", action="store_true")
                         
-    parser.add_option("--getdiskcopy", help="Loads processed tables from /tmp/psqldiskcopy/*.dat"
-                        ,dest="getdiskcopy", action="store_true")
+    parser.add_option("--getdiskcopy", help="Loads a .pydbabackup"
+                        ,dest="getdiskcopy")
                         
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -144,7 +144,10 @@ def main():
     if options.dpasswd and not options.opasswd: options.opasswd=options.dpasswd
     if options.ddb and not options.odb: options.odb=options.ddb
     if options.dport and not options.oport: options.oport=options.dport
-    
+    if options.diskcopy:
+        options.full = True
+        #options.rebuildtables = True
+        
    
     if (options.action=="none"):
         print "You must provide at least one action"
@@ -177,6 +180,60 @@ def main():
     else:
         print "Unknown action: " + options.action;
     
+    if options.getdiskcopy:
+        print "Iniciando carga del fichero '%s'" % options.getdiskcopy
+        if not options.full:
+            print "WARN: No se ha pasado --full , por lo que no se han revisado las tablas antes de empezar."
+        db.query("SET client_min_messages = panic;");            
+        f1 = open(options.getdiskcopy)
+        mode = 0 # 0 - espera tabla; 1 - configurando; 2 - volcando datos
+        while True:
+            line = f1.readline()
+            if not line: break
+            if mode == 0:
+                msg = ''
+                if line == "--TABLE--\n": mode = 1
+            elif mode == 1:
+                if line[:3] == '-- ':
+                    if line[3:9] == 'table:':
+                        msg = 'loading ' + line[3:-1] + " "
+                        sys.stdout.write(msg)
+                        sys.stdout.flush()
+                
+                if line[:3] == '--*':
+                    try:
+                        db.query(line[3:]);
+                        msg += "."
+                        sys.stdout.write(".")
+                        sys.stdout.flush()
+                    except:
+                        print "Error en la sql:"
+                        print line[3:-1]
+                        print traceback.format_exc()
+                if line == "--BEGIN-COPY--\n":
+                    mode = 2
+                    nlineas=0
+            elif mode == 2:
+                nlineas+=1
+                db.putline(line)
+                sys.stdout.write("\r%s %d registros cargados." % (msg,nlineas))
+                sys.stdout.flush()
+                if line == "\\.\n":
+                    try:
+                        db.endcopy()
+                        sys.stdout.write(" OK\n")
+                    except IOError, err:
+                        sys.stdout.write(" ERROR!\n")
+                        sys.stdout.write(str(err))
+                        sys.stdout.write("\n")
+                        
+                    sys.stdout.flush()
+                    mode = 0
+
+                
+            
+            
+        
     
     
 if __name__ == "__main__":

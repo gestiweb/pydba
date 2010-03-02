@@ -8,9 +8,17 @@ import _mysql     # depends - python-mysqldb
 import traceback
 import os
 import re
-import sys
+import sys,sha
+import datetime, random
 
 from pydba_utils import *
+def get_timehash():
+    now = datetime.datetime.now()
+    nseed = random.randint(0,256)
+    timehash = "%02d%02d%02d%02d%02x" % (now.month,now.day,now.hour,now.minute, nseed)
+    return timehash 
+        
+exec_hash = get_timehash();
 
 
 
@@ -112,7 +120,10 @@ class MTDParser:
                         tfield.has_relations_m1=True
                         # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
                         required = False
-                        if field.null == "false": required = True
+                        if str(field.null) == "false": 
+                            required = True
+                            #print "** REQ in Field %s.%s." % (table,name)
+
                         self.child_tables.append({"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) , "required" : required })
                     else:
                         print "ERROR: Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
@@ -135,7 +146,9 @@ class MTDParser:
                     elif str(relation.card)=="M1":
                         tfield.has_relations_m1=True
                         required = False
-                        if field.null == "false": required = True
+                        if str(field.null) == "false": 
+                            required = True
+                            #print "** REQ in Field %s.%s." % (table,name)
                         
                         # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
                         rel = {"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) , "required" : required}
@@ -303,7 +316,6 @@ def create_table(db,table,mtd,oldtable=None):
                 ispkey = True
                 this_field_requires_index = True
                 unique_index = " UNIQUE "
-                import random
                 random.seed()
                 rn1 = random.randint(0,16**4)
                 rn2 = random.randint(0,16**4)                
@@ -416,7 +428,6 @@ def create_table(db,table,mtd,oldtable=None):
         except:
             pass
             #print "ERROR:", drop , " .. execution failed:"
-            #import sys
             #traceback.print_exc(file=sys.stdout)
             #print "-------"
             
@@ -458,13 +469,11 @@ def create_indexes(db,indexes,table):
             except:
                 print "Error al crear el índice!", index
                 status = False
-                import sys
                 traceback.print_exc(file=sys.stdout)
                 
         except:
             status = False
             print index
-            import sys
             traceback.print_exc(file=sys.stdout)
     
     return status                
@@ -677,7 +686,6 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
 
     if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
         print "Iniciando volcado de Baselec ****"
-        import sys
         #sys.stdout.flush()
         print "Vaciando tabla . . . "
         sys.stdout.flush()
@@ -690,8 +698,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         Regenerar = True
 
      
-    if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
-        Regenerar = True
+    #if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+    #    Regenerar = True
         
         
         
@@ -714,7 +722,6 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 for fila in dt_indexes:
                     ddb.query("DROP INDEX %s;" % fila['indice'])
         
-            import datetime, random
             now = datetime.datetime.now()
             nseed = random.randint(0,255)
         
@@ -746,11 +753,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               print "**** Motivo:" , why
             if not fail and options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
                 print "Tabla Baselec encontrada."
-            elif not fail and options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
+            elif not fail and options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0 : 
                 # Generar comandos copy si se especifico
-                print "Cargando desde .dat"
+                #print "Cargando desde .dat"
+                # ANULADO!!, no hace nada. 
                 primarykey = mparser.primary_key[0]
                 fields = ', '.join(mparser.basic_fields)
+                """
                 try:
                     sql = "COPY %s (%s) FROM '/tmp/psqldiskcopy/%s.dat'" % (table, fields, table)
                     qry = ddb.query(sql)
@@ -758,7 +767,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     print "Error al cargar datos."
                     print traceback.format_exc()
                     print "--------------"
-                
+                """
         
         
             elif not fail:
@@ -907,20 +916,60 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         # Generar comandos copy si se especifico
         primarykey = mparser.primary_key[0]
         fields = ', '.join(mparser.basic_fields)
+        filename = "%s-%s.pydbabackup" % (options.ddb,exec_hash)
+        qry = ddb.query("SELECT COUNT(*) as count FROM %s" % (table))
+        num = 0
+        for row in qry.dictresult():
+            try:
+                num = int(row['count'])
+            except:
+                pass
+                
+        if num > 0:
+            print "Volcando tabla %s (%d)\t>> %s" % (table, num, filename)
+    
+        """
         f1 = open("/tmp/psqldiskcopy/%s.restore.sql" % table, "w")
         f1.write("-- primary key: %s\n\n" % primarykey)
         f1.write("COPY %s (%s) FROM '/tmp/psqldiskcopy/%s.dat'" % (table, fields, table))
         f1.close()
-        
+    
         sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO '/tmp/psqldiskcopy/%s.dat'" % (fields, table, primarykey, table)
         print "Copiando a disco %s . . . " % table
         qry = ddb.query(sql)
+        """
+        f1 = open(filename, "a")
+        f1.write("\n");
+        f1.write("--TABLE--\n")
+        f1.write("-- table: %s\n" % table)
+        f1.write("-- fields: %s\n" % repr(fields))
+        f1.write("-- primarykey: %s\n" % primarykey)
+        f1.write("--*TRUNCATE %s;\n" % (table))
+        f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
+        f1.write("--BEGIN-COPY--\n")
+    
+        sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
+        qry = ddb.query(sql)
+        try:        
+            n = 0
+            while True:
+                line = ddb.getline()
+                f1.write(line+"\n");
+                n += 1
+                if line == "\\.": break
+            ddb.endcopy()
+        except:
+            print "Un error ocurrió durante la copia (%d/%d lineas fueron copiadas):" % (n,num)
+            print traceback.format_exc()
+            f1.write("\\.\n");
+        f1.write("\n");
+        
+        
+        
         
     # ************************************* BASELEC *****************************************
             
     if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
-        import datetime
-        
         csv=open(options.loadbaselec,"r")
         print "Contando lineas . . . "
         sys.stdout.flush()
@@ -995,7 +1044,6 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         pto1 = to1 * 100.0 / lineas
 
         print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
-        import sys
         sys.stdout.flush()
         #auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
         import_table(options,ddb,table,data,mparser.field)
@@ -1007,7 +1055,6 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
           
     # SINCRONIZACION MAESTRO>ESCLAVO      
     if options.odb != options.ddb : # TODO: Aquí falta comparar también los puertos y IP's.
-        import sha
         mparser.basic_fields.sort()
         try:
             origin_data=export_table(options,odb,table,mparser.basic_fields)
@@ -1106,7 +1153,6 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
             print  table, len(origin_rows),len(dest_rows),len(update_rows)
           
-    import random
     try:
         for pkey in mparser.primary_key:
             tfield=mparser.field[pkey]
@@ -1208,7 +1254,6 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
             if (options.debug):
                 print "** Subdividiendo importacion de tabla %s (%d:%d) **" % (table,lh,rh)
             else:
-                import sys
                 sys.stdout.write('.')
                 sys.stdout.flush()
                 
@@ -1251,7 +1296,6 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
             except:
                 print " ** Error desconocido ocurrio comparando los primary keys. ** "
                 print " kval :: " , kval
-                import traceback
                 
                 why = traceback.format_exc()
                 print why
@@ -1259,7 +1303,6 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
     except:
         sz2 = 0
         why = ""
-        import traceback
         why = traceback.format_exc()
         print "--- Error al contar filas: "
         print why
@@ -1287,7 +1330,6 @@ def auto_import_table(options,ddb,table,data,mparser_field,pkey):
         log += auto_import_table(options,ddb,table,newdata[half:],mparser_field, pkey)
     else:
         why = ""
-        import traceback
         why = traceback.format_exc()
         for line in data:
             line["*why*"] = why
@@ -1491,7 +1533,7 @@ def procesarOLAP(db):
                     'field': child_table['nfield'],
                     'nfield': child_table['field'],
                     'type': 'reverse',
-                    'required': False,
+                    'required': child_table['required'],
                     }
                 
                 real_child_tables[tablename][ctablename].append(reverse_child)
@@ -1531,7 +1573,9 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = 
             rtype = "weak"
             reltypes = set([])
                 
-            for rel in lstrel: reltypes|=set([rel['type']])
+            for rel in lstrel: 
+                reltypes|=set([rel['type']])
+                if rel['required']: reltypes|=set(["required"])
             
             if "required" in reltypes: rtype = "required"
             elif "strong" in reltypes: rtype = "strong"
