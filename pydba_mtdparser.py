@@ -418,8 +418,14 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
         else:
             composedfieldname = ", ".join(ck)
             composedfieldname2 = "".join(ck)
-            indexes+=["CREATE UNIQUE INDEX %s_%s_m1_idx ON %s (%s);" 
-                    % (table,composedfieldname2,table,composedfieldname)]
+            if addchecks:
+                unique = " UNIQUE "
+            else:
+                unique = " "
+            
+            
+            indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
+                    % (unique,table,composedfieldname2,table,composedfieldname)]
     
         
         
@@ -945,6 +951,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         f1.write("--TABLE--\n")
         f1.write("-- table: %s\n" % table)
         f1.write("-- fields: %s\n" % repr(fields))
+        f1.write("-- rows: %d\n" % num)
         f1.write("-- primarykey: %s\n" % primarykey)
         f1.write("--*TRUNCATE %s;\n" % (table))
         f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))

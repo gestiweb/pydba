@@ -29,6 +29,7 @@ def create_db(options):
     db=dbconnect(options)
     options.ddb=ddb
     try:
+        db.query("DROP DATABASE IF EXISTS %s;" % options.ddb)
         db.query("CREATE DATABASE %s WITH TEMPLATE = template0 ENCODING = 'UTF8';" % options.ddb)
     except:
         print "Fallo al crear la base de datos %s. Se asume que ya está creada y se continúa." % ddb

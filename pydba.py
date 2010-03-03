@@ -31,6 +31,7 @@ def main():
                         rebuildtables=False,
                         flscriptparser=False,
                         addchecks=False,
+                        preparse = False,
                         files_loaded=[],
                         modules={}
                         )
@@ -42,6 +43,9 @@ def main():
 
     parser.add_option("--addchecks", help="Creates database checks (constraints, unique indexes)"
                         ,dest="addchecks", action="store_true")
+                        
+    parser.add_option("--preparse", help="Checks and parses all MTD's"
+                        ,dest="preparse", action="store_true")
                         
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -79,7 +83,7 @@ def main():
     g_action.add_option("-R","--repairdb", action="store_const", const="repair_db"
         ,dest="action", help="Execute tests to repair DB")
     
-    g_action.add_option("-C","--createdb", action="store_const", const="create_db"
+    g_action.add_option("--create","--createdb", action="store_const", const="create_db"
         ,dest="action", help="Create a new Database with basic fl* tables")
     
     g_action.add_option("-c","--check", action="store_const", const="check"
@@ -152,24 +156,31 @@ def main():
         options.full = True
         #options.rebuildtables = True
         
-   
+    if ( options.action=="setup_olap" or 
+        options.action=="check" or
+        options.getdiskcopy or
+        options.diskcopy ) : 
+        options.preparse = True
+        
+        
+           
     if (options.action=="none"):
         print "You must provide at least one action"
     
     elif (options.action=="load_module"):
-        db=load_module(options)
+        db=load_module(options, preparse = options.preparse)
         repair_db(options,db)
     elif (options.action=="setup_olap"):
-        db=load_module(options, preparse=True)
+        db=load_module(options, preparse = options.preparse)
         procesarOLAP(db)
     elif (options.action=="check"):
-        db=load_module(options, preparse=True)
+        db=load_module(options, preparse = options.preparse)
         comprobarRelaciones()
     elif (options.action=="repair_db"):
         db=repair_db(options)
     elif (options.action=="create_db"):
         db=create_db(options)
-        load_module(options,db)
+        db=load_module(options, db, preparse = options.preparse)
         repair_db(options,db)
     elif (options.action=="test_pydba"):
         from pydba_mtdparser import export_table,create_table,import_table
@@ -197,12 +208,18 @@ def main():
             if mode == 0:
                 msg = ''
                 if line == "--TABLE--\n": mode = 1
+                rows = -1
             elif mode == 1:
                 if line[:3] == '-- ':
                     if line[3:9] == 'table:':
                         msg = 'loading ' + line[3:-1] + " "
                         sys.stdout.write(msg)
                         sys.stdout.flush()
+                    if line[3:8] == 'rows:':
+                        try:
+                            rows = int(line[8:-1])
+                        except:
+                            rows = -1
                 
                 if line[:3] == '--*':
                     try:
@@ -217,10 +234,15 @@ def main():
                     mode = 2
                     nlineas=0
             elif mode == 2:
-                nlineas+=1
                 db.putline(line)
-                if nlineas % 13 == 0 or line == "\\.\n":
-                    sys.stdout.write("\r%s %d registros cargados. " % (msg,nlineas))
+                if line != "\\.\n":
+                    nlineas+=1
+                
+                if nlineas % 7 == 0 or line == "\\.\n":
+                    if rows > 0:
+                        sys.stdout.write("\r%s %d registros cargados (%.2f%%). " % (msg,nlineas,float(nlineas*100.0)/rows))
+                    else:
+                        sys.stdout.write("\r%s %d registros cargados. " % (msg,nlineas))
                     sys.stdout.flush()
                 if line == "\\.\n":
                     try:
