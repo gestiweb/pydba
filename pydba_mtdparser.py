@@ -10,6 +10,7 @@ import os
 import re
 import sys,sha
 import datetime, random
+import zlib , math
 
 from pydba_utils import *
 def get_timehash():
@@ -951,7 +952,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         f1.write("--TABLE--\n")
         f1.write("-- table: %s\n" % table)
         f1.write("-- fields: %s\n" % repr(fields))
-        f1.write("-- rows: %d\n" % num)
+        # f1.write("-- rows: %d\n" % num)
         f1.write("-- primarykey: %s\n" % primarykey)
         f1.write("--*TRUNCATE %s;\n" % (table))
         f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
@@ -959,12 +960,73 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     
         sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
         qry = ddb.query(sql)
+        buffers = []
+        softlimit = 10531  # TIENE QUE SER PRIMO!! 
+        primelist = [607, 877]
+        # escoger uno de:    127  , 353 , 607 ,   877 , 1153 , 1453 ,  2689   , 4001   , 6763   
+        # 10531, 16033 376931
+        conflimit = 2 ** 16
+        pages = math.ceil(float(num) / conflimit)
+        if pages < 1: pages = 1
+        limit = math.floor(float(num) / pages)
+        if limit < 1: limit = 1
+        bufsize = 0
+        if num > 100:
+            f1.flush()
+            pos = f1.tell() 
+            over = pos % 8
+            f1.write("\n" * (8-over))
+        
         try:        
             n = 0
             while True:
                 line = ddb.getline()
-                f1.write(line+"\n");
+                
+                splitted = line.split("\t")
+                line_hash = zlib.adler32(splitted[0]) & 0xffffffff
+                if len(buffers) == 0:
+                    for f in splitted:
+                        buffers.append([])
                 n += 1
+                if line != "\\.": 
+                    bufsize +=1
+                    for field,buffer1 in zip(splitted,buffers):
+                        buffer1.append(field)
+                        
+                    
+                if (line_hash % softlimit in primelist or bufsize >= limit or line == "\\.") and bufsize > 0:
+                    if num > 1024:
+                        f1.flush()
+                        pos = f1.tell() 
+                        over = pos % 8
+                        if over > 2 or bufsize > 1024:
+                            f1.write("\n" * (8-over))
+                        
+                    f1.write("\n-- bindata >>\n")
+                    #f1.write("\n-- bindata >> rows: %d %d-%d\n" % (bufsize,n-bufsize+1,n))
+                    
+                    for field,buffer1,fname in zip(splitted,buffers,mparser.basic_fields):
+                        buf = zlib.compress("\n".join(buffer1),9)
+                        #f1.write("%s:%d;" % (fname,len(buf)))
+                        #f1.write("%s;" % (fname))
+                        if len(buf) > 1024:
+                            f1.flush()
+                            pos = f1.tell() 
+                            over = pos % 8
+                            if over > 5:
+                                f1.write("\n" * (8-over))
+                            
+                        f1.write(buf)
+                        f1.write("\n")
+                        
+                    buffers = []
+                    bufsize = 0
+                    for f in splitted:
+                        buffers.append([])
+                        
+                    
+                #f1.write(line+"\n");
+                
                 if line == "\\.": break
             ddb.endcopy()
         except:
