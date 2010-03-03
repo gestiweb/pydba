@@ -230,7 +230,7 @@ class MTDParser:
         
 
 # Crea una tabla según las especificaciones del MTD
-def create_table(db,table,mtd,oldtable=None):
+def create_table(db,table,mtd,oldtable=None,addchecks = False):
     txtfields=[]
     typetr={
         'string'    : 'character varying',
@@ -344,7 +344,9 @@ def create_table(db,table,mtd,oldtable=None):
                 #else:
                 #    print("WARNING: %s.%s has one relation without "
                 #            "'card' tag" % (table,row['name']))
-                            
+        if unique_index and addchecks==False:
+            unique_index = "  "
+            
         if this_field_requires_index:
             indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
                     % (unique_index,table,row['name'],table,row['name'])]
@@ -537,7 +539,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if (options.debug):
             print "Creando tabla '%s' ..." % table
         try:
-            idx = create_table(ddb,table,mtd)
+            idx = create_table(ddb,table,mtd, addchecks = options.addchecks)
             create_indexes(ddb,idx,table)
         except:
             print "Error no esperado!"
@@ -745,7 +747,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     except:
                         pass
             try:
-              indexes = create_table(ddb,table,mtd,oldtable=newnametable)
+              indexes = create_table(ddb,table,mtd,oldtable=newnametable,addchecks = options.addchecks)
             except:
               fail = True
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table

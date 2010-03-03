@@ -30,6 +30,7 @@ def main():
                         getdiskcopy=False,
                         rebuildtables=False,
                         flscriptparser=False,
+                        addchecks=False,
                         files_loaded=[],
                         modules={}
                         )
@@ -38,6 +39,9 @@ def main():
                         
     parser.add_option("--getdiskcopy", help="Loads a .pydbabackup"
                         ,dest="getdiskcopy")
+
+    parser.add_option("--addchecks", help="Creates database checks (constraints, unique indexes)"
+                        ,dest="addchecks", action="store_true")
                         
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -184,7 +188,7 @@ def main():
         print "Iniciando carga del fichero '%s'" % options.getdiskcopy
         if not options.full:
             print "WARN: No se ha pasado --full , por lo que no se han revisado las tablas antes de empezar."
-        db.query("SET client_min_messages = panic;");            
+        db.query("SET client_min_messages = error;");            
         f1 = open(options.getdiskcopy)
         mode = 0 # 0 - espera tabla; 1 - configurando; 2 - volcando datos
         while True:
@@ -202,10 +206,9 @@ def main():
                 
                 if line[:3] == '--*':
                     try:
-                        db.query(line[3:]);
-                        msg += "."
-                        sys.stdout.write(".")
+                        sys.stdout.write("\r%s Ejecutando: %s... " % (msg,line[3:15]))
                         sys.stdout.flush()
+                        db.query(line[3:]);
                     except:
                         print "Error en la sql:"
                         print line[3:-1]
@@ -216,16 +219,15 @@ def main():
             elif mode == 2:
                 nlineas+=1
                 db.putline(line)
-                sys.stdout.write("\r%s %d registros cargados." % (msg,nlineas))
-                sys.stdout.flush()
+                if nlineas % 13 == 0 or line == "\\.\n":
+                    sys.stdout.write("\r%s %d registros cargados. " % (msg,nlineas))
+                    sys.stdout.flush()
                 if line == "\\.\n":
                     try:
                         db.endcopy()
-                        sys.stdout.write(" OK\n")
-                    except IOError, err:
-                        sys.stdout.write(" ERROR!\n")
-                        sys.stdout.write(str(err))
-                        sys.stdout.write("\n")
+                        sys.stdout.write("OK             \n")
+                    except IOError:
+                        sys.stdout.write("*** ERROR!\n")
                         
                     sys.stdout.flush()
                     mode = 0
