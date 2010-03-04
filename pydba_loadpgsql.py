@@ -44,12 +44,12 @@ def loadview(database, pgname, code, sql):
         print "Error inesperado leyendo el fichero de la vista."
         return
      
-        
+    """    
     try:
         database.query("DROP VIEW %s;" % pgname)
     except:
         pass
-    
+    """
     try:
         database.query("CREATE OR REPLACE VIEW %s AS \n %s" % (pgname,sql))
     except:
