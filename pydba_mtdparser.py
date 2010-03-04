@@ -11,7 +11,7 @@ import re
 import sys,sha
 import datetime, random
 import zlib , math
-
+from base64 import b64decode, b64encode
 from pydba_utils import *
 def get_timehash():
     now = datetime.datetime.now()
@@ -951,12 +951,12 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         f1 = open(filename, "a")
         f1.write("\n");
         f1.write("--TABLE--\n")
-        f1.write("-- rows: %d\n" % num)
+        f1.write("-- rows: %04X\n" % num)
         f1.write("-- table: %s\n" % table)
-        f1.write("-- fields: %s\n" % repr(fields))
+        f1.write("-- fields: %s\n" % ",".join(mparser.basic_fields))
         f1.write("-- primarykey: %s\n" % primarykey)
-        f1.write("--*TRUNCATE %s;\n" % (table))
-        f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
+        #f1.write("--*TRUNCATE %s;\n" % (table))
+        #f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
         f1.write("--BEGIN-COPY--\n")
     
         sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
@@ -1004,24 +1004,34 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     
                 if ((line_hash % softlimit in primelist and bufsize >= softlimit / (len(primelist) * 2) ) or bufsize >= limit or line == "\\.") and bufsize > 0:
                     f1.write("-- bindata >>\n")
-                    f1.write("-- rows: %d %d-%d\n" % (bufsize,n-bufsize+1,n))
-                    f1.write("-- lenghts: ")
+                    #f1.write("-- rows: %d %d-%d\n" % (bufsize,n-bufsize+1,n))
+                    #f1.write("-- lenghts: ")
                     bufs = []
                     totallen = 0
-                    for field,buffer1,fname in zip(splitted,buffers,mparser.basic_fields):
+                    if len(buffers) != len(mparser.basic_fields):
+                        print "ERROR: Las longitudes de los arrays no coinciden!!"
+                        print "buffers %d, fields %d" % (len(buffers), len(mparser.basic_fields))
+                        
+                    for buffer1,fname in zip(buffers,mparser.basic_fields):
                         #buf = "\t".join(buffer1) 
                         buf = zlib.compress("\t".join(buffer1),9)
-                        f1.write("%X " % len(buf))
+                        #f1.write("%X " % len(buf))
                         totallen += len(buf)
                         bufs.append(buf)
-                    f1.write("\n")
+                    #f1.write("\n")
                     
                     nsz = blocksize
                     f1.flush()
                     pos = f1.tell() 
                     over = pos % nsz
                     if nsz-over < totallen/5.0 or nsz-over < (pos - last_sync_pos) / (blocks+1):
-                        f1.write("\n" * (nsz-over))
+                        if pos - last_sync_pos > nsz-over * 100: 
+                            if nsz-over > 3:
+                                f1.write("-- " + "." * (nsz-over-4)+"\n")
+                            else:
+                                f1.write("\n" * (nsz-over))
+                            f1.flush()
+                            last_sync_pos = f1.tell() 
                     
                     blocks += 1
                     for buf,fname in zip(bufs,mparser.basic_fields):
@@ -1030,18 +1040,22 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                         pos = f1.tell() 
                         over = pos % nsz
                         if nsz-over < len(buf)/30.0 :
-                            f1.write("\n" * (nsz-over))
-                            f1.flush()
-                            last_sync_pos = f1.tell() 
+                            if pos - last_sync_pos > nsz-over * 100:
+                                if nsz-over > 3:
+                                    f1.write("-- " + "." * (nsz-over-4)+"\n")
+                                else:
+                                    f1.write("\n" * (nsz-over))
+                                f1.flush()
+                                last_sync_pos = f1.tell() 
                             
                         #f1.write("%d:%s;" % (len(buf),fname))
-                        f1.write("%s;" % (fname))
-                        f1.write(buf)
+                        #f1.write("%s;" % (fname))
+                        f1.write(b64encode(buf))
                         f1.write("\n")
                         
                     buffers = []
                     bufsize = 0
-                    for f in splitted:
+                    for f in mparser.basic_fields:
                         buffers.append([])
                         
                     

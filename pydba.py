@@ -9,6 +9,9 @@ from pydba_repairdb import repair_db
 from pydba_createdb import create_db
 from pydba_execini import exec_ini
 
+from base64 import b64decode, b64encode
+import zlib
+
 import os, sys, traceback 		# variables entorno
 
 def main():
@@ -206,21 +209,36 @@ def main():
             line = f1.readline()
             if not line: break
             if mode == 0:
-                msg = ''
                 if line == "--TABLE--\n": mode = 1
+                msg = ''
                 rows = -1
+                table = ""
+                fields = []
+                primarykey = ""
+                buffers = []
+                
             elif mode == 1:
                 if line[:3] == '-- ':
-                    if line[3:9] == 'table:':
-                        msg = 'loading ' + line[3:-1] + " "
+                    splline = line[:-1].split(" ")               
+                    
+                    if splline[1] == 'primarykey:':
+                        primarykey = splline[2]
+                    
+                    if splline[1] == 'fields:':
+                        fields = splline[2].split(",")
+                        
+                    if splline[1] == 'table:':
+                        table = splline[2]
+                        msg = 'loading table: ' + table + " "
                         sys.stdout.write(msg)
                         sys.stdout.flush()
-                    if line[3:8] == 'rows:':
+                    if splline[1] == 'rows:':
                         try:
-                            rows = int(line[8:-1])
+                            rows = int(splline[2],16)
                         except:
                             rows = -1
                 
+                """
                 if line[:3] == '--*':
                     try:
                         sys.stdout.write("\r%s Ejecutando: %s... " % (msg,line[3:15]))
@@ -230,31 +248,129 @@ def main():
                         print "Error en la sql:"
                         print line[3:-1]
                         print traceback.format_exc()
+                """
                 if line == "--BEGIN-COPY--\n":
+                    
+                    try:
+                        sql = "TRUNCATE \"%s\";" % table
+                        sys.stdout.write("\r%s TRUNCATE" % (msg))
+                        sys.stdout.flush()
+                        db.query(sql);
+                    except:
+                        print "Error en la sql:"
+                        print sql
+                        print traceback.format_exc()
+                    
                     mode = 2
                     nlineas=0
             elif mode == 2:
-                db.putline(line)
-                if line != "\\.\n":
-                    nlineas+=1
-                
-                if nlineas % 7 == 0 or line == "\\.\n":
-                    if rows > 0:
-                        sys.stdout.write("\r%s %d registros cargados (%.2f%%). " % (msg,nlineas,float(nlineas*100.0)/rows))
+                if len(line)<2: continue
+                if line == "--TABLE--\n": 
+                    if nlineas > 0:
+                        db.putline("\\.\n")
+                            
+                        if rows > 0:
+                            sys.stdout.write("\r%s %d registros (%.2f%%).  SAVING      " % (msg,nlineas,float(nlineas*100.0)/rows))
+                        else:
+                            sys.stdout.write("\r%s %d registros.           SAVING      " % (msg,nlineas))
+                        sys.stdout.flush()
+                        try:
+                            db.endcopy()
+                            if rows > 0:
+                                sys.stdout.write("\r%s %d registros (%.2f%%).  OK          " % (msg,nlineas,float(nlineas*100.0)/rows))
+                            else:
+                                sys.stdout.write("\r%s %d registros.           OK          " % (msg,nlineas))
+                        except IOError:
+                            sys.stdout.write("*** ERROR!\n")
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
                     else:
-                        sys.stdout.write("\r%s %d registros cargados. " % (msg,nlineas))
-                    sys.stdout.flush()
-                if line == "\\.\n":
-                    try:
-                        db.endcopy()
-                        sys.stdout.write("OK             \n")
-                    except IOError:
-                        sys.stdout.write("*** ERROR!\n")
+                        sys.stdout.write("\r%s .. empty\n" % (msg))
+                        sys.stdout.flush()
+                    if len(buffers)> 0 and len(buffers) != len(fields):
+                        print "\n ERROR: Se esperaban %d campos pero hay %d ?? " % (len(fields),len(buffers))
+                    mode = 1
+                    msg = ''
+                    rows = -1
+                    table = ""
+                    fields = []
+                    primarykey = ""
                         
+                    buffers = []
+                    
+                if line == '-- bindata >>\n':
+                    if len(buffers)> 0 and len(buffers) != len(fields):
+                        print "\n ERROR: Se esperaban %d campos pero hay %d ?? " % (len(fields),len(buffers))
+                    if rows > 0:
+                        sys.stdout.write("\r%s %d registros (%.2f%%).  PRELOAD     " % (msg,nlineas,float(nlineas*100.0)/rows))
+                    else:
+                        sys.stdout.write("\r%s %d registros.           PRELOAD     " % (msg,nlineas))
                     sys.stdout.flush()
-                    mode = 0
+                    buffers = []
+                    continue
+                if line[:2] == '--': continue
+                if len(buffers)<len(fields):
+                    if rows > 0:
+                        sys.stdout.write("\r%s %d registros (%.2f%%).  PROCESS    " % (msg,nlineas,float(nlineas*100.0)/rows))
+                    else:
+                        sys.stdout.write("\r%s %d registros.           PROCESS    " % (msg,nlineas))
+                    sys.stdout.flush()
+                    buf = zlib.decompress(b64decode(line[:-1]))
+                    mfields = buf.split("\t")
+                    buffers.append(mfields)
+                    if len(buffers) == len(fields):
+                        if nlineas == 0:
+                            
+                            try:
+                                sql = "COPY \"%s\" (%s) FROM STDIN;" % (table, ", ".join(fields))
+                                db.query(sql);
+                            except:
+                                print "Error en la sql:"
+                                print sql
+                                print traceback.format_exc()
 
+                        # ROTAR FILAS
+                        lrows = []
+                        for n in buffers[0]: lrows.append([])
+                        for n,buffer1 in enumerate(buffers):
+                            for row,val in zip(lrows,buffer1):
+                                row.append(val)
+                            
+                        if rows > 0:
+                            sys.stdout.write("\r%s %d registros (%.2f%%).  UPLOADING   " % (msg,nlineas,float(nlineas*100.0)/rows))
+                        else:
+                            sys.stdout.write("\r%s %d registros.           UPLOADING   " % (msg,nlineas))
+                        sys.stdout.flush()
+                        
+                        for row in lrows:
+                            db.putline("\t".join(row)+"\n")
+                            nlineas+=1
+                        del lrows
+                        
+                            
+                    """
+                    db.putline(line)
+                    if line != "\\.\n":
+                        nlineas+=1
                 
+                    if nlineas % 7 == 0 or line == "\\.\n":
+                        if rows > 0:
+                            sys.stdout.write("\r%s %d registros cargados (%.2f%%). " % (msg,nlineas,float(nlineas*100.0)/rows))
+                        else:
+                            sys.stdout.write("\r%s %d registros cargados. " % (msg,nlineas))
+                        sys.stdout.flush()
+                    if line == "\\.\n":
+                        try:
+                            db.endcopy()
+                            sys.stdout.write("OK             \n")
+                        except IOError:
+                            sys.stdout.write("*** ERROR!\n")
+                        
+                        sys.stdout.flush()
+                        mode = 0
+                        """
+
+
             
             
         
