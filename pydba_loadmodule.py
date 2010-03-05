@@ -25,6 +25,19 @@ def load_module(options,db=None, preparse=False):
             return 0
     if options.verbose:
         print " -> LoadModule"
+    
+    sql="BEGIN;"
+    db.query(sql)
+    try:
+        sql="LOCK flfiles, flmodules, flareas NOWAIT;"
+        db.query(sql)
+    except:
+        print "Hay alguien usando las tablas de fl* de AbanQ! no se pueden cargar los módulos!"
+        sql="ROLLBACK;"
+        db.query(sql)
+        raise
+        
+    
     modules=[]
     dirs2={}
     mod_filenames = []
@@ -89,6 +102,10 @@ def load_module(options,db=None, preparse=False):
     
     if options.flscriptparser == True:
         flscriptparser(launch=True)
+        
+    sql="COMMIT;"
+    db.query(sql)
+
     return db
     
     

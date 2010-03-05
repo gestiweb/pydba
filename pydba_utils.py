@@ -10,6 +10,8 @@ import _mysql   # depends - python-mysqldb
 import os       # permite la función os.join
 import getpass
 
+ddb_cn = None
+odb_cn = None
 # Calcular extension de un fichero
 def f_ext(filename):
     name_s=filename.split(".")
@@ -89,6 +91,7 @@ def SHA1(text):
 
 
 def dbconnect(options):
+    global ddb_cn, odb_cn
     if (not options.dpasswd):
         options.dpasswd = getpass.getpass("dPassword:")
         
@@ -96,10 +99,14 @@ def dbconnect(options):
         options.ddriver == options.odriver and
         options.dhost == options.ohost  and
         options.dport == options.oport and
+        options.ddb == options.odb and
         options.duser == options.ouser 
         ):
         options.opasswd = options.dpasswd 
         options.samedatabase = True
+        if odb_cn:
+            ddb_cn = odb_cn
+            return ddb_cn
     else:
         print "WARN: El servidor de destino no es el mismo que el de origen."
         print options.ddriver , options.odriver 
@@ -147,11 +154,13 @@ def dbconnect(options):
                         options.dport,
                         options.duser,
                         ))
+    ddb_cn = cn
     return cn
     
     
 
 def odbconnect(options):
+    global ddb_cn, odb_cn
     if (not options.opasswd):
         options.opasswd = getpass.getpass("oPassword:")
         
@@ -159,10 +168,14 @@ def odbconnect(options):
         options.ddriver == options.odriver and
         options.dhost == options.ohost  and
         options.dport == options.oport and
+        options.ddb == options.odb and
         options.duser == options.ouser 
         ):
         options.dpasswd = options.opasswd 
         options.samedatabase = True
+        if ddb_cn:
+            odb_cn = ddb_cn
+            return odb_cn
     else:
         print "WARN: El servidor de destino no es el mismo que el de origen."
         print options.ddriver , options.odriver 
@@ -210,6 +223,9 @@ def odbconnect(options):
                         options.oport,
                         options.ouser,
                         ))
+                        
+    odb_cn = cn
+
     return cn
     
     

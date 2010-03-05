@@ -552,6 +552,17 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             print "Error no esperado!"
             print traceback.format_exc()
             return False
+        try:
+            ltable = table
+            sql = "LOCK %s NOWAIT;" % ltable
+            if (options.verbose): print sql
+            ddb.query(sql);
+            if (options.verbose): print "done."
+        except:
+            print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
+            ddb.query("ROLLBACK;");
+            raise
+            
         return True
 
     # La tabla existe, hay que ver cómo la modificamos . . . 
@@ -709,6 +720,32 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
      
     #if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
     #    Regenerar = True
+    if Regenerar:
+        qry = ddb.query("select usename, client_addr  FROM pg_stat_activity WHERE datname ='%s';" % options.ddb);
+        
+        rows = qry.dictresult()
+        if len(rows)>1:
+            print "WARN: Más de un usuario está conectado a '%s', no se regeneran tablas." % options.ddb
+            for row in rows:
+                print row
+    
+        
+    if Regenerar:
+        try:
+            ltable = table
+            ddb.query("SAVEPOINT lock_%s;" % ltable);
+            sql = "LOCK %s NOWAIT;" % ltable
+            if (options.verbose): print sql
+            ddb.query(sql);
+            if (options.verbose): print "done."
+        except:
+            print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
+            ddb.query("ROLLBACK TO SAVEPOINT lock_%s;" % ltable);
+            Regenerar = False
+            print "ERROR: ¡No se regenará la tabla %s!" % ltable
+        finally:
+            ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
+        
         
         
         
@@ -760,6 +797,12 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
               why = traceback.format_exc()
               print "**** Motivo:" , why
+              
+            sql = "LOCK %s;" % table
+            if (options.verbose): print sql
+            ddb.query(sql);
+            if (options.verbose): print "done."
+              
             if not fail and options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
                 print "Tabla Baselec encontrada."
             elif not fail and options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0 : 
@@ -914,13 +957,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             except:
               print "No se pudo borrar la tabla de backup."
               fail = True
-              
+            """
             try:
               ddb.query("VACUUM ANALYZE %s;" % (table))
             except:
               print "No se pudo analizar la nueva tabla."
               fail = True
-               
+               """
     if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
         # Generar comandos copy si se especifico
         global last_sync_pos
@@ -1296,7 +1339,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         print "PKeys: %s" % mparser.primary_key
         raise
                 
-    return (not fail)
+    return (not fail and Regenerar)
         
 # Comprobar Primary Keys en una tabla:
 # SELECT * FROM information_schema.constraint_table_usage WHERE table_name='articulos'

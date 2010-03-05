@@ -4,6 +4,7 @@
 # Fichero de reparación de base de datos para PyDBa
 import pg             # depends - python-pygresql
 import _mysql     # depends - python-mysqldb
+import sys
         
 from pydba_utils import *
 from pydba_mtdparser import load_mtd    
@@ -26,7 +27,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     
     if (not odb):
         if (not options.odb):
-            print "RepairDB requiere una base de datos de destino y no proporcionó ninguna."
+            print "RepairDB requiere una base de datos de origen y no proporcionó ninguna."
             return 0
         odb=odbconnect(options)
         if (not odb): 
@@ -66,7 +67,20 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         print "Inicializando reparación de la base de datos '%s'..." % options.ddb
         print " * Calcular firmas SHA1 de files y metadata"
     
-    
+    odb.query("BEGIN;");
+    try:
+        lltables = "flfiles,flserial,flmetadata".split(",")
+        for ltable in lltables:
+            sql = "LOCK %s NOWAIT;" % ltable
+            if (options.verbose): print sql
+            odb.query(sql);
+            if (options.verbose): print "done."
+    except:
+        print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
+        odb.query("ROLLBACK;");
+        raise
+        
+            
     qry_omodulos=odb.query("SELECT sha " +
             "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' ORDER BY sha");
     ofiles=[]
@@ -150,6 +164,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         
         if (f_ext(modulo['nombre'])=="mtd"):
             tabla=modulo['nombre'][:-4]
+            
             qry_modulos=ddb.query("SELECT xml FROM flmetadata WHERE tabla='%s'" % tabla);
             tablas=qry_modulos.dictresult() 
             TablaCargada=False
@@ -190,3 +205,4 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             ddb.query("INSERT INTO flserial (serie,sha) VALUES(1,'%s')" % (resha1))
             print "Created flserial => %s." % (resha1)     
     
+    odb.query("COMMIT;");

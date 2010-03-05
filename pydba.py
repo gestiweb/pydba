@@ -250,6 +250,16 @@ def main():
                         print traceback.format_exc()
                 """
                 if line == "--BEGIN-COPY--\n":
+                    try:
+                        sql = "BEGIN; LOCK \"%s\";" % table
+                        sys.stdout.write("\r%s LOCKING" % (msg))
+                        sys.stdout.flush()
+                        db.query(sql);
+                    except:
+                        print "Error en la sql:"
+                        print sql
+                        print traceback.format_exc()
+                        raise
                     
                     try:
                         sql = "TRUNCATE \"%s\";" % table
@@ -260,6 +270,7 @@ def main():
                         print "Error en la sql:"
                         print sql
                         print traceback.format_exc()
+                        raise
                     
                     mode = 2
                     nlineas=0
@@ -282,11 +293,52 @@ def main():
                                 sys.stdout.write("\r%s %d registros.           OK          " % (msg,nlineas))
                         except IOError:
                             sys.stdout.write("*** ERROR!\n")
-                        sys.stdout.write("\n")
                         sys.stdout.flush()
                     else:
-                        sys.stdout.write("\r%s .. empty\n" % (msg))
+                        sys.stdout.write("\r%s .. empty" % (msg))
                         sys.stdout.flush()
+                        
+                    sys.stdout.write("\r%s .. COMMIT                  " % (msg))
+                    sys.stdout.flush()
+                    try:
+                        sql = "COMMIT;"
+                        db.query(sql);
+                    except:
+                        print "Error en la sql:"
+                        print sql
+                        print traceback.format_exc()
+                        raise
+                        
+                    sys.stdout.write("\r%s .. VACUUM                  " % (msg))
+                    sys.stdout.flush()
+                    try:
+                        sql = "VACUUM FULL FREEZE \"%s\";" % table
+                        db.query(sql);
+                    except:
+                        print "Error en la sql:"
+                        print sql
+                        print traceback.format_exc()
+                        raise
+                        
+
+                    sys.stdout.write("\r%s .. ANALYZE                  " % (msg))
+                    sys.stdout.flush()
+                    try:
+                        sql = "ANALYZE \"%s\";" % table
+                        db.query(sql);
+                    except:
+                        print "Error en la sql:"
+                        print sql
+                        print traceback.format_exc()
+                        raise
+                        
+                        
+                    if rows > 0:
+                        sys.stdout.write("\r%s %d registros (%.2f%%).              " % (msg,nlineas,float(nlineas*100.0)/rows))
+                    else:
+                        sys.stdout.write("\r%s %d registros.                       " % (msg,nlineas))
+                    sys.stdout.write("\n")
+                        
                     if len(buffers)> 0 and len(buffers) != len(fields):
                         print "\n ERROR: Se esperaban %d campos pero hay %d ?? " % (len(fields),len(buffers))
                     mode = 1
@@ -328,6 +380,7 @@ def main():
                                 print "Error en la sql:"
                                 print sql
                                 print traceback.format_exc()
+                                raise
 
                         # ROTAR FILAS
                         lrows = []
