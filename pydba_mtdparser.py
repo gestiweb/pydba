@@ -743,8 +743,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             ddb.query("ROLLBACK TO SAVEPOINT lock_%s;" % ltable);
             Regenerar = False
             print "ERROR: ¡No se regenará la tabla %s!" % ltable
-        finally:
-            ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
+        ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
         
         
         
