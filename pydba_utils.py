@@ -2,13 +2,18 @@
 #   encoding: UTF8
 
 # Fichero de utilidades para PyDBa
-#import sha
-import hashlib
 
 import pg       # depends - python-pygresql
 import _mysql   # depends - python-mysqldb
 import os       # permite la función os.join
 import getpass
+typeSHALib = None
+try:
+    import hashlib
+    typeSHALib = "hashlib"
+except ImportError:
+    import sha
+    typeSHALib = "sha"
 
 ddb_cn = None
 odb_cn = None
@@ -67,9 +72,18 @@ def flscriptparser(root=None,name=None,launch=False):
         os.execvp("flscriptparser",["flscriptparser"]+flscriptparser_filelist)
         flscriptparser_filelist=[]
 
+def sha_hexdigest(text):
+    global typeSHALib
+    if typeSHALib == "sha":
+        return sha.new(text).hexdigest()
+    elif typeSHALib == "hashlib":
+        return hashlib.sha1(text).hexdigest();
+
+
 
 # Crear una firma SHA1 preferentemente a partir de iso-8859-15
 def SHA1(text):
+
     utext=text.decode("utf8")
     isotext=""
     for line in utext.split("\n"):
@@ -86,7 +100,7 @@ def SHA1(text):
                     print line
                     return None
     
-    return hashlib.sha1(isotext).hexdigest();
+    return sha_hexdigest(isotext)
 
 
 

@@ -8,7 +8,7 @@ import _mysql     # depends - python-mysqldb
 import traceback
 import os
 import re
-import sys,sha
+import sys
 import datetime, random
 import zlib , math
 from base64 import b64decode, b64encode
@@ -1001,9 +1001,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         #f1.write("--*TRUNCATE %s;\n" % (table))
         #f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
         f1.write("--BEGIN-COPY--\n")
-    
-        sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
-        qry = ddb.query(sql)
+        try:
+            sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
+            qry = ddb.query(sql)
+        except:
+            sql = "COPY %s (%s) TO STDOUT" % (table, fields)
+            qry = ddb.query(sql)
+            
         buffers = []
         softlimit = 16033  # TIENE QUE SER PRIMO!! 
         #primelist = [127  , 353 , 607,877,1153] # ef. 6.13x , 3.9Mb @ 1024
@@ -1221,13 +1225,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             print "ERROR: La tabla %s no tiene PK o tiene más de uno! " % table
         origin_fields.sort()
         for row in origin_data:
-            row_hash=sha.new(repr(row)).hexdigest()
+            row_hash=sha_hexdigest(repr(row))
             row['#hash']=row_hash
             origin_rows[row[pkey]]=row
         
         dest_data=export_table(options,ddb,table,origin_fields)
         for row in dest_data:
-            row_hash=sha.new(repr(row)).hexdigest()
+            row_hash=sha_hexdigest(repr(row))
             row['#hash']=row_hash
             if origin_rows.has_key(row[pkey]):
                 if origin_rows[row[pkey]]['#hash']!=row_hash:
