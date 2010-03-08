@@ -35,9 +35,13 @@ def main():
                         flscriptparser=False,
                         addchecks=False,
                         preparse = False,
+                        rebuildalone  = False,
                         files_loaded=[],
                         modules={}
                         )
+    parser.add_option("--rebuildalone", help="Disallow rebuilds if other users are connected"
+                        ,dest="rebuildalone", action="store_true")
+                        
     parser.add_option("--diskcopy", help="Create a backup .pydbabackup"
                         ,dest="diskcopy", action="store_true")
                         

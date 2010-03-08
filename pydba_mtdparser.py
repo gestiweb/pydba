@@ -603,7 +603,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 if options.verbose:
                     print "Regenerar: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
                 if hasattr(field,"default") and str(field.default):
-                    default_value = "'" + pg.escape_string(str(field.default)) + "'"
+                    if str(field.default) == "null": default_value = "NULL"
+                    else:
+                        default_value = "'" + pg.escape_string(str(field.default)) + "'"
                     if options.verbose:
                         print "Asumiendo valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
                 else:            
@@ -720,15 +722,15 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
      
     #if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
     #    Regenerar = True
-    if Regenerar:
+    if Regenerar and options.rebuildalone:
         qry = ddb.query("select usename, client_addr  FROM pg_stat_activity WHERE datname ='%s';" % options.ddb);
         
         rows = qry.dictresult()
-        if len(rows)>1:
+        if len(rows)>2:
             print "WARN: Más de un usuario está conectado a '%s', no se regeneran tablas." % options.ddb
             for row in rows:
                 print row
-    
+            Regenerar = False
         
     if Regenerar:
         try:
@@ -738,12 +740,12 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             if (options.verbose): print sql
             ddb.query(sql);
             if (options.verbose): print "done."
+            ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
         except:
             print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
             ddb.query("ROLLBACK TO SAVEPOINT lock_%s;" % ltable);
             Regenerar = False
             print "ERROR: ¡No se regenará la tabla %s!" % ltable
-        ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
         
         
         
@@ -834,12 +836,16 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 """ % sqlDict
                 fail1 = False
                 try:
+                    ddb.query("SAVEPOINT lock_sql;");
                     ddb.query(sql)
+                    ddb.query("RELEASE SAVEPOINT lock_sql;");
                 except:
                     fail1 = True
+                    print sql
                     print "Error al intentar regenerar por SQL la tabla %s:" % table
                     print traceback.format_exc()
                     print "Se intentará hacer manualmente."
+                    ddb.query("ROLLBACK TO SAVEPOINT lock_sql;");
             
                 if not fail1:
                     try:
