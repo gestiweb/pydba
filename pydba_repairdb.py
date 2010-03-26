@@ -67,13 +67,14 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         print "Inicializando reparación de la base de datos '%s'..." % options.ddb
         print " * Calcular firmas SHA1 de files y metadata"
     
-    odb.query("BEGIN;");
+    if options.transactions: odb.query("BEGIN;");
     try:
         lltables = "flfiles,flserial,flmetadata".split(",")
         for ltable in lltables:
             sql = "LOCK %s NOWAIT;" % ltable
             if (options.verbose): print sql
-            odb.query(sql);
+            if options.transactions:
+                odb.query(sql);
             if (options.verbose): print "done."
     except:
         print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
@@ -205,4 +206,4 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             ddb.query("INSERT INTO flserial (serie,sha) VALUES(1,'%s')" % (resha1))
             print "Created flserial => %s." % (resha1)     
     
-    odb.query("COMMIT;");
+    if options.transactions: odb.query("COMMIT;");

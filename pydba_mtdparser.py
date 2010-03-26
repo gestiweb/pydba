@@ -735,15 +735,18 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     if Regenerar:
         try:
             ltable = table
-            ddb.query("SAVEPOINT lock_%s;" % ltable);
+            if options.transactions:
+                ddb.query("SAVEPOINT lock_%s;" % ltable);
             sql = "LOCK %s NOWAIT;" % ltable
             if (options.verbose): print sql
             ddb.query(sql);
             if (options.verbose): print "done."
-            ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
+            if options.transactions:
+                ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
         except:
             print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
-            ddb.query("ROLLBACK TO SAVEPOINT lock_%s;" % ltable);
+            if options.transactions:
+                ddb.query("ROLLBACK TO SAVEPOINT lock_%s;" % ltable);
             Regenerar = False
             print "ERROR: ¡No se regenará la tabla %s!" % ltable
         
@@ -836,16 +839,19 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 """ % sqlDict
                 fail1 = False
                 try:
-                    ddb.query("SAVEPOINT lock_sql;");
+                    if options.transactions:
+                        ddb.query("SAVEPOINT lock_sql;");
                     ddb.query(sql)
-                    ddb.query("RELEASE SAVEPOINT lock_sql;");
+                    if options.transactions:
+                        ddb.query("RELEASE SAVEPOINT lock_sql;");
                 except:
                     fail1 = True
                     print sql
                     print "Error al intentar regenerar por SQL la tabla %s:" % table
                     print traceback.format_exc()
                     print "Se intentará hacer manualmente."
-                    ddb.query("ROLLBACK TO SAVEPOINT lock_sql;");
+                    if options.transactions:
+                        ddb.query("ROLLBACK TO SAVEPOINT lock_sql;");
             
                 if not fail1:
                     try:
@@ -1345,6 +1351,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     
                         ddb.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
     except:
+        print "Fieldname, table:",tfield.name,table
         print "PKeys: %s" % mparser.primary_key
         raise
                 

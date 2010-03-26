@@ -36,6 +36,7 @@ def main():
                         addchecks=False,
                         preparse = False,
                         rebuildalone  = False,
+                        transactions = False,
                         files_loaded=[],
                         modules={}
                         )
@@ -53,6 +54,9 @@ def main():
                         
     parser.add_option("--preparse", help="Checks and parses all MTD's"
                         ,dest="preparse", action="store_true")
+                        
+    parser.add_option("--transactional", help="Use transactions inside PyDBA"
+                        ,dest="transactions", action="store_true")
                         
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")

@@ -50,17 +50,20 @@ def loadview(database, pgname, code, sql):
     except:
         pass
     """
-    database.query("SAVEPOINT tmp_view;")
+    if options.transactions:
+        database.query("SAVEPOINT tmp_view;")
     try:
         database.query("CREATE OR REPLACE VIEW %s AS \n %s" % (pgname,sql))
     except:
         import sys, traceback
-        database.query("ROLLBACK TO tmp_view;")
+        if options.transactions:
+            database.query("ROLLBACK TO tmp_view;")
         print "ERROR: No se pudo crear la vista %s" % pgname
         print '-'*60
         traceback.print_exc(file=sys.stdout)
         print '-'*60
-    finally:
+        
+    if options.transactions:
         database.query("RELEASE SAVEPOINT tmp_view;")
         
    
