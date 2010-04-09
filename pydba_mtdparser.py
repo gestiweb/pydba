@@ -737,11 +737,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             ltable = table
             if options.transactions:
                 ddb.query("SAVEPOINT lock_%s;" % ltable);
-            sql = "LOCK %s NOWAIT;" % ltable
-            if (options.verbose): print sql
-            ddb.query(sql);
-            if (options.verbose): print "done."
-            if options.transactions:
+                sql = "LOCK %s NOWAIT;" % ltable
+                if (options.verbose): print sql
+                ddb.query(sql);
+                if (options.verbose): print "done."
                 ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
         except:
             print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
@@ -801,11 +800,11 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
               why = traceback.format_exc()
               print "**** Motivo:" , why
-              
-            sql = "LOCK %s;" % table
-            if (options.verbose): print sql
-            ddb.query(sql);
-            if (options.verbose): print "done."
+            if options.transactions:  
+                sql = "LOCK %s;" % table
+                if (options.verbose): print sql
+                ddb.query(sql);
+                if (options.verbose): print "done."
               
             if not fail and options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
                 print "Tabla Baselec encontrada."
