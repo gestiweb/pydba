@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 def loadpgsqlfile(database, pgname, pgtype, pgtext):
     #print "--- Llamada a loadpgsqlfile" 
@@ -50,8 +51,8 @@ def loadview(database, pgname, code, sql):
     except:
         pass
     """
-    if options.transactions:
-        database.query("SAVEPOINT tmp_view;")
+    #if options.transactions:
+    #    database.query("SAVEPOINT tmp_view;")
     try:
         database.query("CREATE OR REPLACE VIEW %s AS \n %s" % (pgname,sql))
     except:
@@ -63,8 +64,8 @@ def loadview(database, pgname, code, sql):
         traceback.print_exc(file=sys.stdout)
         print '-'*60
         
-    if options.transactions:
-        database.query("RELEASE SAVEPOINT tmp_view;")
+    #if options.transactions:
+    #    database.query("RELEASE SAVEPOINT tmp_view;")
         
    
     
