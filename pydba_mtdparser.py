@@ -589,6 +589,30 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         mfield = mparser.field[name]
         if mfield.pk: new_pkey = name
         new_fields.append(name)
+                
+        if hasattr(field,"default") and str(field.default):
+            if str(field.default) == "null": default_value = "NULL"
+            else:
+                default_value = "'" + pg.escape_string(str(field.default)) + "'"
+            if options.verbose:
+                print "Asumiendo valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
+        else:            
+            default_value = "NULL"
+        
+        
+        if default_value == "NULL" and not mfield.null:
+            if mfield.dtype in ["serial","integer","smallint","double precision"]:
+                default_value = "0"
+            elif mfield.dtype in ["boolean","bool"]:
+                default_value = "false"
+            elif mfield.dtype in ["character varying","text"]:
+                default_value = "''"
+            elif mfield.dtype in ["date"]:
+                default_value = "'2001-01-01'"
+            elif mfield.dtype in ["time"]:
+                default_value = "'00:00:01'"
+            else:
+                default_value = "'0'"
         
         if not tablefields.has_key(name):
             if mfield.pk:
@@ -602,42 +626,19 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             else:
                 if options.verbose:
                     print "Regenerar: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
-                if hasattr(field,"default") and str(field.default):
-                    if str(field.default) == "null": default_value = "NULL"
-                    else:
-                        default_value = "'" + pg.escape_string(str(field.default)) + "'"
-                    if options.verbose:
-                        print "Asumiendo valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
-                else:            
-                    default_value = "NULL"
-                
                 Regenerar=True
-                
-                if default_value == "NULL" and not mfield.null:
-                    if mfield.dtype in ["serial","integer","smallint","double precision"]:
-                        default_value = "0"
-                    elif mfield.dtype in ["boolean","bool"]:
-                        default_value = "false"
-                    elif mfield.dtype in ["character varying","text"]:
-                        default_value = "''"
-                    elif mfield.dtype in ["date"]:
-                        default_value = "'2001-01-01'"
-                    elif mfield.dtype in ["time"]:
-                        default_value = "'00:00:01'"
-                    else:
-                        default_value = "'0'"
                     
-                    
-                
                 old_fields.append(default_value)
                 
         else:
-            old_fields.append(name)
 
             null=origin_fielddata[name]["is_nullable"]
             if null=="YES": null=True
             if null=="NO": null=False
-
+            if not mfield.null:
+                old_fields.append("COALESCE(%s,%s)" % (name,default_value))
+            else:
+                old_fields.append(name)
             dtype=origin_fielddata[name]["data_type"]
             mfielddtype = mfield.dtype
             length=origin_fielddata[name]["character_maximum_length"]
