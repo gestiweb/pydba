@@ -67,19 +67,19 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         print "Inicializando reparación de la base de datos '%s'..." % options.ddb
         print " * Calcular firmas SHA1 de files y metadata"
     
-    if options.transactions: odb.query("BEGIN;");
-    try:
-        lltables = "flfiles,flserial,flmetadata".split(",")
-        for ltable in lltables:
-            sql = "LOCK %s NOWAIT;" % ltable
-            if (options.verbose): print sql
-            if options.transactions:
+    if options.transactions: 
+        odb.query("BEGIN;");
+        try:
+            lltables = "flfiles,flserial,flmetadata".split(",")
+            for ltable in lltables:
+                sql = "LOCK %s NOWAIT;" % ltable
+                if (options.verbose): print sql
                 odb.query(sql);
-            if (options.verbose): print "done."
-    except:
-        print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
-        odb.query("ROLLBACK;");
-        raise
+                if (options.verbose): print "done."
+        except:
+            print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
+            odb.query("ROLLBACK;");
+            raise
         
             
     qry_omodulos=odb.query("SELECT sha " +
@@ -176,10 +176,10 @@ def repair_db(options,ddb=None,mode=0,odb=None):
                     sql_update_metadata="UPDATE flmetadata SET xml='%s' WHERE tabla='%s';\n" % (sha1,tabla)
             if not TablaCargada:
                     print "Cargando tabla nueva %s ..." % tabla
-                    sql_update_metadata= ("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
-                        " VALUES('%s','f','0','%s');\n" % (tabla,sha1))
+                    sql_update_metadata=("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
+                        " VALUES('%s','f','0','%s');\n" % (tabla,sha1) )
             if xml:
-                if sql_update_metadata and load_mtd(options,odb,ddb,tabla,xml):
+                if sql_update_metadata and (load_mtd(options,odb,ddb,tabla,xml) or not TablaCargada):
                     if options.verbose:
                         print "Actualizando metadata para %s" % tabla
                     ddb.query(sql_update_metadata)
