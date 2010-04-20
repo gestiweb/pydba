@@ -80,21 +80,6 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
             odb.query("ROLLBACK;");
             raise
-    
-    qry_d_pkeys=ddb.query("SELECT table_name, column_name,constraint_name FROM information_schema.constraint_column_usage WHERE constraint_name LIKE '%_pkey_%';")
-    for row in qry_d_pkeys.dictresult():
-        sql = """
-        ALTER TABLE %(table_name)s DROP CONSTRAINT %(constraint_name)s;
-        ALTER TABLE %(table_name)s ADD PRIMARY KEY (%(column_name)s);
-        """ % row
-        try: 
-            ddb.query(sql)
-            print "PK Regenerado: %(constraint_name)s" % row
-        except:
-            print "Error en query corrigiendo pkey:", row
-            print traceback.format_exc()
-            print "SQL:"
-            print sql
             
        
             
@@ -207,6 +192,21 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     if (len(sql)>0):    
         ddb.query(sql)
         sql=""
+    
+    qry_d_pkeys=ddb.query("SELECT table_name, column_name,constraint_name FROM information_schema.constraint_column_usage WHERE constraint_name LIKE '%_pkey_%';")
+    for row in qry_d_pkeys.dictresult():
+        sql = """
+        ALTER TABLE %(table_name)s DROP CONSTRAINT %(constraint_name)s;
+        ALTER TABLE %(table_name)s ADD PRIMARY KEY (%(column_name)s);
+        """ % row
+        try: 
+            ddb.query(sql)
+            print "PK Regenerado: %(constraint_name)s" % row
+        except:
+            print "Error en query corrigiendo pkey:", row
+            print traceback.format_exc()
+            print "SQL:"
+            print sql
     
     qry_serial=ddb.query("SELECT sha FROM flserial");
     serials=qry_serial.dictresult() 
