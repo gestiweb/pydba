@@ -10,6 +10,7 @@ from pydba_utils import *
 from pydba_mtdparser import load_mtd    
 from exmlparser import XMLParser
 import traceback
+import pydba_loadpgsql
 #    *************************** REPAIR DATABASE *****
 #    
     
@@ -82,7 +83,9 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             raise
             
        
-            
+    pydba_loadpgsql.process_drop(options,ddb)
+    
+
     qry_omodulos=odb.query("SELECT sha " +
             "FROM flfiles WHERE sha!='' AND nombre NOT LIKE '%%alteredtable%%.mtd' ORDER BY sha");
     ofiles=[]
@@ -195,6 +198,25 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     
     qry_d_pkeys=ddb.query("SELECT table_name, column_name,constraint_name FROM information_schema.constraint_column_usage WHERE constraint_name LIKE '%_pkey_%';")
     for row in qry_d_pkeys.dictresult():
+        qry_d_pkeys2=ddb.query("""
+        SELECT table_name, column_name,constraint_name 
+        FROM information_schema.constraint_column_usage 
+        WHERE constraint_name = '%(table_name)s_pkey';
+        """ % row)
+        for row2 in qry_d_pkeys2.dictresult():
+            sql = """
+            ALTER TABLE %(table_name)s DROP CONSTRAINT %(constraint_name)s;
+            """ % row2
+            try: 
+                ddb.query(sql)
+                print "Borrado pkey de la tabla %(table_name)s" % row2
+            except:
+                print "Error en query corrigiendo pkey:", row2
+                print traceback.format_exc()
+                print "SQL:"
+                print sql
+        
+        
         sql = """
         ALTER TABLE %(table_name)s DROP CONSTRAINT %(constraint_name)s;
         ALTER TABLE %(table_name)s ADD PRIMARY KEY (%(column_name)s);
@@ -222,4 +244,5 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             ddb.query("INSERT INTO flserial (serie,sha) VALUES(1,'%s')" % (resha1))
             print "Created flserial => %s." % (resha1)     
     
+    pydba_loadpgsql.process_create(options,ddb)
     if options.transactions: odb.query("COMMIT;");

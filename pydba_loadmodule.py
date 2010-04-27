@@ -12,6 +12,8 @@ import shelve           # persistencia de datos; especial para recordar SHA1
 from exmlparser import XMLParser
 from pydba_utils import *
 
+import pydba_loadpgsql 
+
 #    *************************** LOAD MODULE *****
 #    
     
@@ -105,7 +107,9 @@ def load_module(options,db=None, preparse=False):
     if options.transactions:     
         sql="COMMIT;"
         db.query(sql)
-
+        
+    pydba_loadpgsql.process_dependencies()
+    
     return db
     
     
@@ -171,12 +175,13 @@ def load_module_loadone(options,modpath,db, preparse=False):
                     array_name=name.split(".")
                     # name.ext1.pgsql
                     # array_name = [ "nombre" , "view" , "pgsql" ]
-                    if len(array_name)!=3:
-                        print "ERROR: Al cargar un .pgsql Se esperaban 3 elementos al estilo nombre.view.pgsql y se encontró %s " % name
+                    if len(array_name)==2:
+                        pydba_loadpgsql.loadpgsqlfile(options = options, database = db, pgname = array_name[0], pgtype = "sql1", pgtext = contents_1)
+                    elif len(array_name)!=3:
+                        print "ERROR: Al cargar un .pgsql Se esperaban 2 o 3 elementos al estilo nombre.view.pgsql o nombre.pgsql y se encontró %s " % name
                         continue
                     else:
-                        import pydba_loadpgsql 
-                        pydba_loadpgsql.loadpgsqlfile(database = db, pgname = array_name[0], pgtype = array_name[1], pgtext = contents_1)
+                        pydba_loadpgsql.loadpgsqlfile(options = options, database = db, pgname = array_name[0], pgtype = array_name[1], pgtext = contents_1)
                         
                         
                         

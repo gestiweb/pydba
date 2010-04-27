@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
+import re, traceback
 
-def loadpgsqlfile(database, pgname, pgtype, pgtext):
+pgobjects = {}
+dependency_order = [] # En orden de creación
+
+def loadpgsqlfile(options, database, pgname, pgtype, pgtext):
     #print "--- Llamada a loadpgsqlfile" 
     #print " --- tipo: ", pgtype
     #print " --- name: ", pgname
     formatos_soportados = {}
     formatos_soportados["view"] = loadview
     formatos_soportados["function"] = loadfunction
+    formatos_soportados["sql1"] = loadsql1
     
     if pgtype not in formatos_soportados:
         print "ERROR: Tipo de objeto PgSQL no soportado %s para %s" % (pgtype,pgname)
@@ -14,14 +19,14 @@ def loadpgsqlfile(database, pgname, pgtype, pgtext):
         
     code, text = extractcode(pgtext)
     
-    formatos_soportados[pgtype](database, pgname, code, text)
+    formatos_soportados[pgtype](options, database, pgname, code, text)
         
 
     
 
 
 
-def loadview(database, pgname, code, sql):
+def loadview(options, database, pgname, code, sql):
     # print "Iniciando creacion de la vista %s . . ." % pgname
     if ";" in sql:
         print "ERROR: No se admiten puntos y coma en el fichero %s " % pgname
@@ -53,6 +58,7 @@ def loadview(database, pgname, code, sql):
     """
     #if options.transactions:
     #    database.query("SAVEPOINT tmp_view;")
+    """
     try:
         database.query("CREATE OR REPLACE VIEW %s AS \n %s" % (pgname,sql))
     except:
@@ -63,7 +69,17 @@ def loadview(database, pgname, code, sql):
         print '-'*60
         traceback.print_exc(file=sys.stdout)
         print '-'*60
-        
+    """
+    obj = ObjPgSql()
+    obj.setAttr("name",pgname)
+    obj.setAttr("drop","DROP VIEW %s;" % pgname)
+    obj.setAttr("create","CREATE OR REPLACE VIEW %s AS \n %s" % (pgname,sql))
+    
+    if obj.name in pgobjects:
+        if options.verbose:
+            print "Ya existe una vista con el nombre %s, se ignora." % obj.name
+    else:
+        pgobjects[obj.name] = obj
     #if options.transactions:
     #    database.query("RELEASE SAVEPOINT tmp_view;")
         
@@ -75,7 +91,7 @@ def loadview(database, pgname, code, sql):
 
 
 
-def loadfunction(database, pgname, code, sql):
+def loadfunction(options, database, pgname, code, sql):
     print "Iniciando creacion de la funcion %s . . ." % pgname
     print "Aviso: Aun no se soporta este tipo de objeto. No se carga."    
     
@@ -95,3 +111,195 @@ def extractcode(pgtext):
             text.append(linea)
 
     return (code, "\n".join(text));
+    
+    
+class ObjPgSql:
+    # (required, default, vartype)
+    check_dict = {
+        "depends" : (False, [],     list),
+        "name" :    (True,  None,   str),
+        "drop" :    (True,  None,   str),
+        "create" :  (True,  None,   str),
+    }
+    def __init__(self):
+    
+        for k, v in self.check_dict.iteritems():
+            required, default, vartype = v
+            if required == False:
+                self.setAttr(k,default)
+                
+    def check(self):
+        result = True
+        for k, v in self.check_dict.iteritems():
+            required, default, vartype = v
+            if not hasattr(self,k):
+                print "falta el atributo", k
+                result = False
+            elif type(getattr(self,k)) is not vartype :
+                print "La variable", k, repr(getattr(self,k)), "no es del tipo", vartype
+                result = False
+                        
+            
+        return result
+        
+        
+    def setAttr(self,name, value):
+        assert(name in self.check_dict)
+        try:
+            if self.check_dict[name][2] is list and type(value) is not list:
+                value = [ s.strip() for s in value.split(",")]
+                value = filter(lambda x: len(x)>0, value)
+            value = self.check_dict[name][2](value)
+        except:
+            print "Error al intentar convertir", type(value), repr(value), "en el tipo", self.check_dict[name][2]
+            print traceback.format_exc()
+            raise
+        
+        setattr(self,name,value)
+        
+    def __str__(self):
+        txt = "{"
+        for k, v in self.check_dict.iteritems():
+            if not hasattr(self,k):
+                txt += "%s: Undefined, " % k
+            else:
+                val = getattr(self,k)
+                txt += "%s: %s, " % (k, repr(val))
+        
+        txt += "}"
+        
+        return txt
+    
+
+
+
+def processsql(pgtext):
+    obj = ObjPgSql()
+    text = ""
+    savetovar = None
+    for linea in pgtext.split("\n"):
+        ro = re.match("^--\\* (\w+)([:;=/%&#!|@]+)(.*)$",linea)
+        if ro:
+            #print ro.group(0)
+            if savetovar:
+                obj.setAttr(savetovar, text)
+                savetovar = None
+            varname, operador, valor = ro.group(1,2,3)
+            valor = valor.strip()
+            varname = varname.lower()
+            
+            if operador == ":" :
+                obj.setAttr(varname, valor)
+                
+            if operador == "::" :
+                text = ""
+                savetovar = varname
+        else:
+            text += linea + "\n"
+
+    if savetovar:
+        obj.setAttr(savetovar, text)
+        savetovar = None
+                
+    if obj.check():
+        #print str(obj)
+        return obj
+    else:
+        return None
+        
+
+    
+    
+def loadsql1(options, database, pgname, code, sql):    
+    global pgobjects
+    
+    #print "Iniciando carga del fichero %s . . ." % pgname
+    #print sql
+    obj = processsql(sql)
+    if obj is None:
+        print "Se encontraron errores al cargar %s." % pgname
+        return 
+        
+    if obj.name in pgobjects:
+        if options.verbose:
+            print "Ya existe un fichero cargado con el nombre %s. Se sobrescribe." % pgname
+    pgobjects[obj.name] = obj
+            
+    #    print "Aviso: Aun no se soporta este tipo de objeto. No se carga."    
+
+
+def process_dependencies():
+    global pgobjects,dependency_order
+    pOrigen = []
+    pDestino = []
+    #print "Comprobando dependencias ..."
+    
+    for name, obj in pgobjects.iteritems():
+        pOrigen.append((obj.name,obj.depends))
+    
+    nd = 0
+    maxdepth = 25
+    
+    while len(pOrigen)>0 and nd < maxdepth:
+        modificadas = 0
+        for name, depends in pOrigen[:]:
+            insertar = True
+            for depname in depends:
+                if depname not in pDestino:
+                    insertar = False
+            if insertar:
+                pDestino.append(name)
+                pOrigen.remove((name,depends))
+                modificadas += 1
+        
+        if modificadas == 0:
+            print "Imposible solucionar las siguientes dependencias: (relación circular)"
+            print pOrigen
+            break;
+                
+            
+            
+    
+        
+    if nd >= maxdepth :
+        print "** ERROR: se ha superado la profundidad máxima de resolucion de dependencias"
+        print nd, maxdepth
+    
+    if len(pOrigen)>0:
+        for name, depends in pOrigen[:]:
+            pDestino.append(name)
+            pOrigen.remove((name,depends))
+    
+    dependency_order = pDestino
+            
+
+def process_drop(options, db):
+    global pgobjects,dependency_order
+    for name in reversed(dependency_order):
+        #print "Borrando objeto", name
+        obj = pgobjects[name]
+        try:
+            db.query(obj.drop)
+        except:
+            if options.verbose:
+                print "WARN: Error borrando objeto %s:" % name
+                print traceback.format_exc()
+        
+        
+        
+        
+def process_create(options,db):
+    global pgobjects,dependency_order
+    try:
+        db.query("CREATE LANGUAGE plpgsql;")
+    except:
+        pass
+    for name in dependency_order:
+        #print "Creando objeto", name
+        obj = pgobjects[name]
+        try:
+            db.query(obj.create)
+        except:
+            print "Error creando objeto %s:" % name
+            print traceback.format_exc()
+        

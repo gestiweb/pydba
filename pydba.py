@@ -1,19 +1,50 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #   encoding: UTF8
-import optparse
 
-from pydba_loadmodule import load_module
-from pydba_mtdparser import procesarOLAP, comprobarRelaciones
-from pydba_repairdb import repair_db
-from pydba_createdb import create_db
-from pydba_execini import exec_ini
-
+import traceback
 from base64 import b64decode, b64encode
 import zlib
+import optparse
+import os, sys 		# variables entorno
 
-import os, sys, traceback 		# variables entorno
+start_errors = 0
+try:
+    import pg             # depends - python-pygresql
+except:
+    start_errors += 1
+    print "*** No se encontró la librería 'pg'."
+    print " Para instalar 'pg':"
+    print " ... Debian & Ubuntu: sudo aptitude install python-pygresql"
+    print
+    print traceback.format_exc(1)
+    
+try:
+    import _mysql     # depends - python-mysqldb
+except:
+    start_errors += 1
+    print "*** No se encontró la librería '_mysql'."
+    print " Para instalar '_mysql':"
+    print " ... Debian & Ubuntu: sudo aptitude install python-mysqldb"
+    print
+    print traceback.format_exc(1)
 
+try:
+    from pydba_loadmodule import load_module
+    from pydba_mtdparser import procesarOLAP, comprobarRelaciones
+    from pydba_repairdb import repair_db
+    from pydba_createdb import create_db
+    from pydba_execini import exec_ini
+except:
+    start_errors += 1
+    print "** Error mientras se importaban los modulos de pydba::"
+    print traceback.format_exc(1)
+    
+    
+if start_errors > 0:
+    print "$$$ han habido %d errores de inicio de PyDBA. Se aborta la carga." % start_errors
+    sys.exit(1)
+    
 def main():
 
     parser = optparse.OptionParser()
