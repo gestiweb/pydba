@@ -552,15 +552,17 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             print "Error no esperado!"
             print traceback.format_exc()
             return False
-        try:
-            ltable = table
-            sql = "LOCK %s NOWAIT;" % ltable
-            if (options.verbose): print sql
-            ddb.query(sql);
-            if (options.verbose): print "done."
-        except:
-            print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
-            ddb.query("ROLLBACK;");
+
+        if options.transactions:
+            try:
+                ltable = table
+                sql = "LOCK %s NOWAIT;" % ltable
+                if (options.verbose): print sql
+                ddb.query(sql);
+                if (options.verbose): print "done."
+            except:
+                print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
+                ddb.query("ROLLBACK;");
             raise
             
         return True
