@@ -1215,9 +1215,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 fieldname = csvfields[n]
                 if fieldname[0]=="*": continue
                 try:
-                    val=val.decode("cp1252")
-                    val=val.encode("utf8")
-                    
+                    #val=val.decode("cp1252")
+                    #val=val.encode("utf8")
+                    pass
                 except:
                     val=None
                 if mparser.field[fieldname].dtype == 'double precision':
@@ -1236,7 +1236,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 line[fieldname]=val
             data.append(line)
             to1 += 1
-            if len(data)>2000:
+            if len(data)>200 or lineas - to1 < 2:
                 from1 = to1 - len(data)
                 pfrom1 = from1 * 100.0 / lineas
                 pto1 = to1 * 100.0 / lineas
@@ -1249,9 +1249,14 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 previ = 0
                 while len(data)>0:
                     pfrom1 = from1 * 100.0 / lineas
+                    if import_table(options,ddb,table,data,mparser.field):
+                        print "@ %.2f %% registros copiados %d - %d . . ." % (pfrom1, from1+1, to1+1)
+                        data = []
+                        break
+
                     for i in range(10):
                         if i < previ - 1 : continue
-                        n = 3**i
+                        n = 3**(i+1)
                         frac = int(math.ceil(float(len(data)) / n))
                         if frac<20: frac = 5
                         previ = i
@@ -1632,10 +1637,10 @@ def import_table(options,db,table,data,nfields):
     selected_fields=set(data[0].keys())
     fields_toadd=total_fields-selected_fields
     
-    if len(data)>10:
-        db.query("SET client_min_messages = fatal;");            
-    else:
-        db.query("SET client_min_messages = notice;");            
+    #if len(data)>10:
+    #    db.query("SET client_min_messages = fatal;");            
+    #else:
+    db.query("SET client_min_messages = notice;");            
 
     for fila in data:
         fields=[]
@@ -1677,7 +1682,7 @@ def import_table(options,db,table,data,nfields):
         db.putline("\\."+"\n")
         db.endcopy()
     except:
-        if len(sqlarray)<15 and options.verbose:
+        if options.verbose:
             print "!!!! Error grave importando !!!!"
             print traceback.format_exc()
             print "===================="
@@ -1687,6 +1692,8 @@ def import_table(options,db,table,data,nfields):
                 print line
             print "========================"
             db.query("SET client_min_messages = warning;");            
+        else:
+            print "Error de importacion"
         return False
     sqlarray=[]
     db.query("SET client_min_messages = warning;");            
