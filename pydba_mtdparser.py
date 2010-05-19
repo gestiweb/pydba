@@ -770,6 +770,25 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         
     if Regenerar:
         indexes = []
+        qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
+        dict_otable_count = qry_otable_count.dictresult()
+        existent_rows = int(dict_otable_count[0]["n"])
+        if existent_rows < 1 :
+            Regenerar = False
+            try:
+              ddb.query("DROP TABLE %s CASCADE;" % (table))
+            except:
+              print "No se pudo borrar la tabla antigua." , table
+            try:
+              indexes = create_table(ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
+            except:
+              print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
+              why = traceback.format_exc()
+              print "**** Motivo:" , why
+            if not create_indexes(ddb,indexes, table): 
+              print "No se pudieron crear todos los indices."
+        
+    if Regenerar:
         try:       
             print "Regenerando tabla %s (%d filas)" % (table,old_rows)
             data = None
@@ -983,13 +1002,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             except:
               print "No se pudo borrar la tabla de backup."
               fail = True
-            """
-            try:
-              ddb.query("VACUUM ANALYZE %s;" % (table))
-            except:
-              print "No se pudo analizar la nueva tabla."
-              fail = True
-               """
+            if not options.transactions:
+                try:
+                  ddb.query("VACUUM ANALYZE %s;" % (table))
+                except:
+                  print "No se pudo analizar la nueva tabla."
+                  fail = True
+
     if options.diskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
         # Generar comandos copy si se especifico
         global last_sync_pos
