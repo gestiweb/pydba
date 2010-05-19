@@ -214,7 +214,13 @@ def main():
         repair_db(options,db)
     elif (options.action=="setup_olap"):
         db=load_module(options, preparse = options.preparse)
-        procesarOLAP(db)
+        olap = procesarOLAP(db)
+        olapfilename = "relationdata.yaml"
+        f1 = open(olapfilename,"w")
+        f1.write(olap)
+        f1.close()
+        print "Fichero %s guardado." % olapfilename
+        
     elif (options.action=="check"):
         db=load_module(options, preparse = options.preparse)
         comprobarRelaciones()

@@ -59,6 +59,7 @@ class MTDParser:
         self.nonbasic_fields=[]
         self.primary_key=[]
         self.child_tables=[]
+        self.unique_fields=[]
         self.parent = None
         
     def check_field_attrs(self,field,table):
@@ -123,8 +124,14 @@ class MTDParser:
                         required = False
                         if str(field.null) == "false": 
                             required = True
+                            if hasattr(field,"default"):
+                                required = False
+                                print table,name, "es relacion obligatoria y no tiene default."
                             #print "** REQ in Field %s.%s." % (table,name)
-
+                        if str(getattr(relation,"delc","false")) == "true": 
+                            required = True
+                        
+    
                         self.child_tables.append({"ntable" : str(table), "nfield" : str(name), "table" : str(relation.table), "field" : str(relation.field) , "required" : required })
                     else:
                         print "ERROR: Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
@@ -147,8 +154,8 @@ class MTDParser:
                     elif str(relation.card)=="M1":
                         tfield.has_relations_m1=True
                         required = False
-                        if str(field.null) == "false": 
-                            required = True
+                        #if str(field.null) == "false": 
+                        #    required = True
                             #print "** REQ in Field %s.%s." % (table,name)
                         
                         # print "Relation field %s.%s -> %s.%s" % (table, name, relation.table,relation.field)
@@ -158,7 +165,10 @@ class MTDParser:
                     else:
                         print "INFO: FREE Relation card unknown '%s' in Field %s.%s." % (str(relation.card),table,name)
                                         
-        tfield.name=str(field.name)
+        tfield.name=str(field.name).lower()
+        if str(field.name) != tfield.name:
+            print "WARN: Uso de mayusculas en campo %s.%s." % (table,name)
+            
         tfield.alias=str(field.alias)
         
         if not self.typetr.has_key(str(field.type_)):
@@ -186,9 +196,12 @@ class MTDParser:
             
         if str(field.pk)=='false':
             tfield.pk=False
+            if str(getattr(field,"unique","false")) != "false":
+                self.unique_fields.append(tfield.name)
         elif str(field.pk)=='true':
             tfield.pk=True
             self.primary_key+=[tfield.name]
+            self.unique_fields.append(tfield.name)
         else:
             tfield.pk=False
             print "ERROR: Unknown pk '%s' in Field %s.%s." % (str(field.pk),table,name)
@@ -250,14 +263,14 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
     ck = [] 
     fieldnames = []
     for field in mtd.field:
-        if str(field.name) in fieldnames:
+        if str(field.name).lower() in fieldnames:
             print "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
             raise NameError, "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
         else:
-            fieldnames.append(str(field.name))
+            fieldnames.append(str(field.name).lower())
         row={}
         unique_index = ""
-        row['name']=str(field.name)
+        row['name']=str(field.name).lower()
         field_ck = getattr(field,"ck",'None')
         ispkey = False
         isunique = False
@@ -587,7 +600,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     new_fields = []
     
     for field in mtd.field:
-        name=str(field.name)
+        name=str(field.name).lower()
         mfield = mparser.field[name]
         if mfield.pk: new_pkey = name
         new_fields.append(name)
@@ -1648,8 +1661,106 @@ def comprobarRelaciones():
               pass
               #print "warning: Imposible comparar %s -> %s" % (orig_fk,dest_pk)
             
-            
 def procesarOLAP(db):
+    try:
+        import yaml
+        try:
+            from yaml import CLoader as yamlLoader
+            from yaml import CDumper as yamlDumper
+        except ImportError:
+            from yaml import Loader as yamlLoader
+            from yaml import Dumper as yamlDumper
+            
+    except:
+        print "*** No se encontró la librería 'yaml' (necesaria para generar salida de tablas)."
+        print " Para instalar 'yaml':"
+        print " ... Debian & Ubuntu: sudo aptitude install python-yaml"
+        print
+        print traceback.format_exc(1)
+        return
+        
+    global Tables
+    tables = {}
+    for tablename,table in Tables.iteritems():
+        if len(table.primary_key)<1: continue
+        
+        tables[tablename] = procesarTabla(tablename, table)
+        
+
+    for tablename,table in Tables.iteritems():
+        table.parent_tables = table.child_tables
+        #        print table.unique_fields
+        for parent_table in table.parent_tables:
+            ptablename = parent_table['table']
+            if ptablename not in Tables: continue 
+            ptable = Tables[ptablename]
+            
+            if parent_table['field'] in ptable.unique_fields: parent_table['unique']=True
+            else:  parent_table['unique']=False
+            procesarRelacionesTabla(tables,parent_table)
+        """    
+        for child_table in table.child_tables:
+            ctablename = child_table['table']
+            if ctablename not in Tables: continue 
+            ctable = Tables[ctablename]
+            
+            if child_table['field'] in ctable.unique_fields: child_table['unique']=True
+            else:  child_table['unique']=False
+
+            procesarRelacionesTabla(tables,child_table)
+           """ 
+    export = {"tables" : tables}
+    dump = yaml.dump(export, Dumper=yamlDumper)
+    return dump
+
+def procesarRelacionesTabla(tables, crelation):
+    global Tables
+    rparents = tables[crelation['ntable']]["parents"]
+    rchilds = tables[crelation['table']]["childs"]
+    try:
+        crelation['default'] = str(Tables[crelation['ntable']].field[crelation['nfield']].default)
+    except:
+        crelation['default'] = None
+    
+    
+    parent_rel = {
+        "local_field" : crelation['nfield'],
+        "remote_field" : crelation['field'],
+        "remote_table" : crelation['table'],
+        "local_table" : crelation['ntable'],
+        "required" : crelation['required'],
+        "unique" : crelation['unique'],
+        "default" : crelation['default'],
+    }
+    child_rel = {
+        "local_field" : crelation['field'],
+        "remote_field" : crelation['nfield'],
+        "remote_table" : crelation['ntable'],
+        "local_table" : crelation['table'],
+        "required" : crelation['required'],
+        "unique" : crelation['unique'],
+        "default" : crelation['default'],
+    }
+    rparents.append(parent_rel)
+    rchilds.append(child_rel)
+    
+    
+
+def procesarTabla(tablename, table):
+    global Tables
+    primarykey = table.primary_key[0]
+    fields = Tables[tablename].field.keys()
+    tabla = { 
+#        "name" : tablename,
+        "primarykey" : primarykey,
+
+        "fields" : fields,
+        "parents" : [],
+        "childs" : [],
+    }
+    return tabla
+            
+def _procesarOLAP(db):
     global Tables
     print "Inicio del proceso de tablas para OLAP."
     primarykeys=[]
@@ -1658,6 +1769,10 @@ def procesarOLAP(db):
     for tablename,table in Tables.iteritems():
         rchild_tables = {}
         real_child_tables[tablename] = rchild_tables
+        print table.field.keys()
+        for field in table.field.values():
+            print field.default
+            
 
     for tablename,table in Tables.iteritems():
         primarykey = None
@@ -1703,21 +1818,25 @@ def procesarOLAP(db):
                     }
                 
                 real_child_tables[tablename][ctablename].append(reverse_child)
-        
+    ltables = []    
     for tablename,table in Tables.iteritems():
         for pk in table.primary_key:
             primarykeys.append("%s.%s" % (tablename ,pk))
             
         if 'column0' in table.field:
             tables_column0.append(tablename)
+
+        ltables.append(tablename)
             
     print "*** TABLAS ***"               
-    computarTablas(db,list(sorted(tables_column0)),real_child_tables,tables_column0)
+    computarTablas(db,list(sorted(ltables)),real_child_tables,tables_column0)
     print "=============="
     
-def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = []):
+def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = [], depth = 1):
     doctables = []
-    for table in sorted(lstTablas): 
+    lchild = []
+    for table in sorted(lstTablas):
+        """ 
         estadistica = {0:0,1:0,2:0}
         if table in tables_column0:
             result = db.query("SELECT column0, COUNT(*) as cantidad FROM %s GROUP BY column0;" % table);
@@ -1730,11 +1849,10 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = 
                 column0 = 0
             cantidad = row['cantidad']
             estadistica[column0] = cantidad
-
-        print table, estadistica[0], estadistica[1], estadistica[2]
+        """
+        print table #, estadistica[0], estadistica[1], estadistica[2]
         complejidad = 0
         tipo = "general"
-        
         for ctablename, lstrel in sorted(real_child_tables[table].iteritems()):
             rtype = "weak"
             reltypes = set([])
@@ -1747,14 +1865,42 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = 
             elif "strong" in reltypes: rtype = "strong"
             elif "reverse" in reltypes: rtype = "reverse"
             
-            if "required" in reltypes: print ":",
             
             if re.match("lineas",ctablename): 
                 tipo = "documento"
                 rtype = "documento"
                 if ctablename not in doctables: doctables.append(ctablename)
 
+            if "reverse" in reltypes:
+                printit = False
+                if table not in tables_column0:
+                    if ctablename in tables_column0 :
+                        print "  <<*",
+                        printit = True
+                        
+                else:
+                    if ctablename not in tables_column0 :
+                        print "  << ",
+                        printit = True
+                        
+                if printit:
+                    if "required" in reltypes: print ":",ctablename,
+                    else: print " ",ctablename,
+                    for rel in lstrel:
+                        field1 = rel['field']
+                        field2 = rel['nfield']
+                        print field1 , "->", field2, 
+                    print ";"
+                    
+                elif "required" in reltypes: 
+                    print "  <<?:",ctablename
+                continue
+                
             if rtype == "reverse" and ctablename not in tables_column0 and rtype!="documento":           continue
+                
+            if "required" in reltypes: print ":",
+            else: print " ",
+            
             if rtype == "reverse":
                 print " <<",
             elif rtype == "weak":
@@ -1765,14 +1911,15 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = 
             elif ctablename in tables_column0:
                 print "*--",
                 complejidad+=20
-            elif ctablename in lstTablas:
-                print "?--",
-                complejidad+=10
-            elif rtype == "documento":
-                print "|--",
-                complejidad+=10
+            #elif ctablename in lstTablas:
+            #    print "?--",
+            #    complejidad+=10
+            #elif rtype == "documento":
+            #    print "|--",
+            #    complejidad+=10
             else:
                 print " --",
+                if "required" in reltypes: lchild.append(ctablename)
                 complejidad+=1
                 
             estadistica2 = {0:0,1:0,2:0}
@@ -1781,6 +1928,7 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = 
                 field1 = rel['field']
                 field2 = rel['nfield']
                 print field1 , "->", field2, 
+                """
                 if table in tables_column0:
                     result = db.query("SELECT t1.column0, COUNT(*) as cantidad FROM %s t1 INNER JOIN %s t2 ON t1.%s = t2.%s GROUP BY t1.column0;" % (table,ctablename,field1,field2));
                 else:
@@ -1792,14 +1940,19 @@ def computarTablas(db,lstTablas,real_child_tables,tables_column0, seen_tables = 
                         column0 = 0
                     cantidad = row['cantidad']
                     estadistica2[column0] += cantidad
-                
-            print ";", estadistica2[0], estadistica2[1], estadistica2[2]
+                """
+            print ";" #, estadistica2[0], estadistica2[1], estadistica2[2]
         print "> %s (%d)" % (tipo, complejidad)
         if len(real_child_tables[table]): print
            
-    doctables = list(set(doctables) - set(seen_tables))
+    """doctables = list(set(doctables) - set(seen_tables))
     if len(doctables):
-        computarTablas(db,list(sorted(doctables)),real_child_tables,tables_column0, list(set(seen_tables) | set(lstTablas)))
+        computarTablas(db,list(sorted(doctables)),real_child_tables,tables_column0, list(set(seen_tables) | set(lstTablas)))"""
+    doctables = list(set(lchild) - set(seen_tables))        
+    if len(doctables) and depth > 0: 
+        print "==========>", ", ". join(doctables)
+        print
+        computarTablas(db,list(sorted(doctables)),real_child_tables,tables_column0, list(set(seen_tables) | set(lstTablas)), depth - 1)
     
             
     
