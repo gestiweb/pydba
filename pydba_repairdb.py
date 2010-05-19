@@ -141,6 +141,9 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     xmlfiles=("xml","ui","qry","kut","mtd","ts")
     ficheros_actualizados=0
     for modulo in modulos:
+        if options.loadbaselec:
+            if modulo['nombre'] != 'baselec.mtd': 
+                continue
         xml=None
         if options.full and modulo.has_key('contenido'):
             sha1=SHA1(modulo['contenido'])
@@ -183,10 +186,14 @@ def repair_db(options,ddb=None,mode=0,odb=None):
                     sql_update_metadata=("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
                         " VALUES('%s','f','0','%s');\n" % (tabla,sha1) )
             if xml:
+                if options.loadbaselec and not sql_update_metadata:
+                    sql_update_metadata = "--"
+                    
                 if sql_update_metadata and (load_mtd(options,odb,ddb,tabla,xml) or not TablaCargada):
                     if options.verbose:
                         print "Actualizando metadata para %s" % tabla
-                    ddb.query(sql_update_metadata)
+                    if sql_update_metadata != '--':
+                        ddb.query(sql_update_metadata)
                 
         if (len(sql)>1024):
             ddb.query(sql)

@@ -8,7 +8,7 @@ import _mysql     # depends - python-mysqldb
 import traceback
 import os
 import re
-import sys
+import sys, math
 import datetime, random
 import zlib , math
 from base64 import b64decode, b64encode
@@ -548,6 +548,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     mparser.parse_mtd(mtd)
     Tables[table]=mparser
     if len(tablefields)==0:
+        if options.debug:
+            print "- tabla %s es nueva." % table
+    
         sql = """SELECT * from information_schema.tables 
             WHERE table_schema = 'public' AND table_name ~ '^%s_[0-9]{12}[0-9a-f]{2}$'""" % table
         qry_columns2=odb.query(sql)
@@ -579,6 +582,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             raise
             
         return True
+        
+    if options.debug:
+        print "- tabla %s existe." % table
 
     # La tabla existe, hay que ver cómo la modificamos . . . 
 
@@ -600,6 +606,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     new_fields = []
     
     for field in mtd.field:
+    
         name=str(field.name).lower()
         mfield = mparser.field[name]
         if mfield.pk: new_pkey = name
@@ -721,19 +728,26 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if not primarykey or not old_pkey:
             print "*** ERROR: La tabla %s no tiene primarykey, no puede ser regenerada." % (table)
             Regenerar = False
+            
+    if options.debug:
+        print "- ",options.loadbaselec ,table ,os.path.isfile(options.loadbaselec)
 
-    if options.loadbaselec and table == "baselec" and os.path.isfile(options.loadbaselec):
-        print "Iniciando volcado de Baselec ****"
-        #sys.stdout.flush()
-        print "Vaciando tabla . . . "
-        sys.stdout.flush()
-        try:
-          ddb.query("DELETE FROM %s" % (table))
-        except:
-          print "No se pudo vaciar la tabla."
-          return
-        #print "done"
-        Regenerar = True
+    if options.loadbaselec and table == "baselec":
+        if os.path.isfile(options.loadbaselec):
+            print "Iniciando volcado de Baselec ****"
+            #sys.stdout.flush()
+            print "Vaciando tabla . . . "
+            sys.stdout.flush()
+            try:
+              ddb.query("DELETE FROM %s" % (table))
+            except:
+              print "No se pudo vaciar la tabla."
+              return
+            #print "done"
+            Regenerar = True
+        else:
+            print "ERROR en volcado de Baselec **** no existe el fichero:", options.loadbaselec 
+            
 
      
     #if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
@@ -1222,19 +1236,37 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 line[fieldname]=val
             data.append(line)
             to1 += 1
-            if len(data)>=1000:
+            if len(data)>2000:
                 from1 = to1 - len(data)
                 pfrom1 = from1 * 100.0 / lineas
                 pto1 = to1 * 100.0 / lineas
                 
-                print "@ %.2f %% Copiando registros %d - %d . . ." % (pfrom1, from1+1, to1+1)
                 
                 #sys.stdout.write('.')
                 sys.stdout.flush()
                 # print "Copiando registros %.1f%% - %.1f%% . . ." % (pfrom1, pto1)
                 # auto_import_table(options,ddb,table,data,mparser.field,mparser.primary_key[0])    
-                import_table(options,ddb,table,data,mparser.field)
-                data = []                              
+                previ = 0
+                while len(data)>0:
+                    pfrom1 = from1 * 100.0 / lineas
+                    for i in range(10):
+                        if i < previ - 1 : continue
+                        n = 3**i
+                        frac = int(math.ceil(float(len(data)) / n))
+                        if frac<20: frac = 5
+                        previ = i
+                        if import_table(options,ddb,table,data[:frac],mparser.field):
+                            print "@ %.2f %% registros copiados %d - %d . . ." % (pfrom1, from1+1, from1+frac)
+                            data = data[frac:]
+                            from1 += frac
+                            break
+                            
+                        if frac<20: 
+                            data = data[frac:]
+                            from1 += frac
+                            break
+                    
+                    
 
         from1 = to1 - len(data)
         pfrom1 = from1 * 100.0 / lineas
@@ -1625,7 +1657,7 @@ def import_table(options,db,table,data,nfields):
         sqlvar['fields']=", ".join(fields)
         sqlvar['values']=", ".join(values)
         sqlarray+=["\t".join(copy_values)]
-        
+        """
         if len(sqlarray)>2048:
             sql_text="COPY %(tabla)s (%(fields)s) FROM stdin;" % sqlvar
             db.query(sql_text )
@@ -1634,17 +1666,31 @@ def import_table(options,db,table,data,nfields):
             db.putline("\\."+"\n")
             db.endcopy()
             sqlarray=[]
-            
+        """    
     del data
     
     sql_text="COPY %(tabla)s (%(fields)s) FROM stdin;" % sqlvar
-    db.query(sql_text)
-    for line in sqlarray:
-        db.putline(line+"\n")
-    db.putline("\\."+"\n")
-    db.endcopy()
+    try:
+        db.query(sql_text)
+        for line in sqlarray:
+            db.putline(line+"\n")
+        db.putline("\\."+"\n")
+        db.endcopy()
+    except:
+        if len(sqlarray)<15 and options.verbose:
+            print "!!!! Error grave importando !!!!"
+            print traceback.format_exc()
+            print "===================="
+            print sql_text
+            print "----------"
+            for line in sqlarray:
+                print line
+            print "========================"
+            db.query("SET client_min_messages = warning;");            
+        return False
     sqlarray=[]
     db.query("SET client_min_messages = warning;");            
+    return True
     
     
 
