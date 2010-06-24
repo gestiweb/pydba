@@ -23,6 +23,9 @@ def open_createSQL():
 
     
 def create_db(options):
+    if (not options.ddb):
+        print "CreateDB requiere una base de datos y no proporcionó ninguna."
+        return 0
     print "Creando Base de datos %s ..." % options.ddb
     ddb=options.ddb
     options.ddb="postgres"
