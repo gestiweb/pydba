@@ -143,7 +143,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
                 if f_ext(name)=="mod":
                     module=name[:-4]
                     file_module=loadfile_inutf8(root, name)
-                    module_parse=XMLParser()
+                    module_parse=XMLParser(name)
                     module_parse.parseText(file_module)
                     d_module={
                         'name' :        str(module_parse.root.module.name),
@@ -195,10 +195,10 @@ def load_module_loadone(options,modpath,db, preparse=False):
                     tables+=[table]
                     mtd_files[table]=contents_1
                     if preparse:
-                        xml=XMLParser()
+                        xml=XMLParser(name)
                         xml.parseText(contents_1)
                         if xml.root==None:
-                            print "ERROR: Failed to parse xml %s" %  (name)
+                            #print "ERROR: Failed to parse xml %s" %  (name)
                             xml=None
                         else:
                             import pydba_mtdparser

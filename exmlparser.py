@@ -85,6 +85,8 @@ class XMLParser:
             data=";".join(ret)
         self.xmlusing._data=data        
     
+    def __init__(self, name="noname"):
+        self.name = name
     
     def parseText(self,text):
         self.root=XMLParser_data()
@@ -100,7 +102,10 @@ class XMLParser:
         p.CharacterDataHandler = self.char_data
         try:
             p.Parse(text, 1)
-        except Expat.ExpatError, inst:
-            print "___________"
-            print inst.args 
+        except Expat.ExpatError, error:
+            lines = text.split("\n")
+            line = lines[error.lineno-1]
+            print "ERROR: parsing xml %s (%d) %s [%s]" % (self.name,error.code, error.args[0], line[error.offset-16:error.offset] + "·" +  line[error.offset:error.offset+16]) 
+            # print "Linea: %d  , Offset: %d" % (error.lineno, error.offset)
+            
             self.root=None

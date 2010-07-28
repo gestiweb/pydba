@@ -75,6 +75,25 @@ class MTDParser:
                 if childname == "relation":
                     setattr(field,childname,[child])
                     #print childname, repr(child)
+            if childname != "relation":
+                misspellings = {
+                    "false" : [ "false", "flase", "fasle", "fales" ] ,
+                    "true" : [ "true", "ture", "treu"] ,
+                }
+                text = str(child)
+                ltext = text.lower()
+                replace = None
+                for original, misslist in misspellings.iteritems():
+                    if text == original: break
+                    if ltext == original: replace = original; break
+                    if ltext in misslist: replace = original; break
+                
+                if replace is not None:
+                    setattr(field,childname,replace)
+                    print "WARN: '%s'.'%s' <%s> se ha reemplazado el valor '%s' por '%s'" % (table, name, childname,text,replace)
+                    
+                    
+                    
         global Tables
         if not hasattr(field,"name"):
             field.name='no_name'
@@ -521,8 +540,17 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     if table!=table.lower():
         print "ERROR: Table name '%s' has uppercaps" % table
         table=table.lower()
-    if str(mtd.name)!=table:
-        print "WARNING: Expected '%s' in MTD name but '%s' found ***" % (table,str(mtd.name))
+    mtdquery = getattr(mtd, "query", None)
+    if mtdquery:
+        if str(mtdquery)!=table:
+            print "ERROR: Expected '%s' in MTD QUERY name but '%s' found ***" % (table,str(mtdquery))
+        # Probablemente se puede ignorar las cargas de estas queries. No son tablas en realidad.    
+        if str(mtd.name)==table:
+            print "ERROR: MTD Query Filename '%s' HAS BEEN FOUND in the <name> attribute: '%s' ***" % (table,str(mtd.name))
+    else:
+        if str(mtd.name)!=table:
+            print "ERROR: Expected '%s' in MTD name but '%s' found ***" % (table,str(mtd.name))
+        
     
     qry_columns=ddb.query("SELECT * from information_schema.columns"
                 " WHERE table_schema = 'public' AND table_name='%s'" % table)

@@ -155,10 +155,9 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             sha1=modulo['sha']
         
         if f_ext(modulo['nombre']) in xmlfiles:
-            xml=XMLParser()
+            xml=XMLParser("%s.%s" % (modulo['idmodulo'],modulo['nombre']))
             xml.parseText(modulo['contenido'])
             if xml.root==None:
-                print "ERROR: Failed to parse xml %s.%s" %  (modulo['idmodulo'],modulo['nombre'])
                 xml=None
             
         
