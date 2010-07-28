@@ -7,9 +7,12 @@ import re
 
 
 class XMLParser_data:
-    _name=""
-    _data=""
-    _attrs={}
+    def __init__(self):
+        self._name=""
+        self._data=""
+        self._attrs={}
+        self._children=[]
+        
     def __getitem__(self, key):
         return self
         
@@ -47,6 +50,7 @@ class XMLParser:
         new=XMLParser_data()
         if (not hasattr(self.xmlusing,method_name)):
             setattr(self.xmlusing,method_name,new)
+            self.xmlusing._children.append(method_name)
         else:
             # -> Si ya existía un atributo con este nombre, hay que convertirlo a lista.
             prevattr=getattr(self.xmlusing,method_name)

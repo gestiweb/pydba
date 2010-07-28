@@ -65,6 +65,16 @@ class MTDParser:
     def check_field_attrs(self,field,table):
         tfield=MTDParser_data()
         name=getattr(field,"name","noname")
+        for childname in field._children: 
+            child = getattr(field,childname)
+            if type(child) is list:
+                if childname != "relation":
+                    setattr(field,childname,child[0])
+                    print "ERROR: Tabla '%s' campo '%s' , etiqueta '%s' duplicada!" % (table, name, childname)
+            else:
+                if childname == "relation":
+                    setattr(field,childname,[child])
+                    #print childname, repr(child)
         global Tables
         if not hasattr(field,"name"):
             field.name='no_name'
