@@ -266,8 +266,12 @@ class MTDParser:
         self.child_tables=[]        
         self.name = mtd.name
         self.parent = getattr(mtd,"parent",None)
-        for field in mtd.field:
+        for n,field in list(reversed(list(enumerate(mtd.field)))):
             tfield=self.check_field_attrs(field,mtd.name)
+            if tfield.name in self.field:
+                print "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (tfield.name, self.name)
+                del mtd.field[n]
+                
             self.field[tfield.name]=tfield
             
         
@@ -293,8 +297,9 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
     fieldnames = []
     for field in mtd.field:
         if str(field.name).lower() in fieldnames:
-            print "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
-            raise NameError, "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
+            print "FATAL: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
+            continue 
+            #raise NameError, "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
         else:
             fieldnames.append(str(field.name).lower())
         row={}
