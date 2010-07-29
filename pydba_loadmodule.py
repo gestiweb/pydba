@@ -92,7 +92,7 @@ def load_module(options,db=None, preparse=False):
     options.modules_loaded={}
     for module in modules:
         load_module_loadone(options,module,db,preparse)
-        
+    
     sql="DELETE FROM flfiles WHERE sha NOT IN ('%s');\n" % "', '".join(options.sha_allowed_files)
     db.query(sql)
     
@@ -161,6 +161,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
                 if f_ext(name) in filetypes:
                     contents_1=loadfile_inutf8(root,name)
                     contents=pg.escape_string(contents_1)
+                    if pd[fname]["sha"] is None: loadFile = True # Some bug in database can cause sha is None.
                     if loadFile:                    
                         sha=SHA1(contents_1)
                         pd[fname]={"mtime":mtime, "sha":sha, 'root' : root,'name' : name}
