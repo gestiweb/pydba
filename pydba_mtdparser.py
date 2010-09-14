@@ -62,7 +62,7 @@ class MTDParser:
         self.unique_fields=[]
         self.parent = None
         
-    def check_field_attrs(self,field,table):
+    def check_field_attrs(self,field,table,debug=False):
         tfield=MTDParser_data()
         name=getattr(field,"name","noname")
         for childname in field._children: 
@@ -153,9 +153,9 @@ class MTDParser:
                         required = False
                         if str(field.null) == "false": 
                             required = True
-                            if hasattr(field,"default"):
+                            if not hasattr(field,"default"):
                                 required = False
-                                print table,name, "es relacion obligatoria y no tiene default."
+                                if debug: print "DEBUG:",table,name, "es relacion obligatoria y no tiene default."
                             #print "** REQ in Field %s.%s." % (table,name)
                         if str(getattr(relation,"delc","false")) == "true": 
                             required = True
@@ -260,14 +260,14 @@ class MTDParser:
         return tfield
         
     
-    def parse_mtd(self,mtd):
+    def parse_mtd(self,mtd,debug=False):
         self.field={}
         self.primary_key=[]        
         self.child_tables=[]        
         self.name = mtd.name
         self.parent = getattr(mtd,"parent",None)
         for n,field in list(reversed(list(enumerate(mtd.field)))):
-            tfield=self.check_field_attrs(field,mtd.name)
+            tfield=self.check_field_attrs(field,mtd.name,debug=False)
             if tfield.name in self.field:
                 print "ERROR: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (tfield.name, self.name)
                 del mtd.field[n]
@@ -588,7 +588,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     
     global Tables
     mparser=MTDParser()
-    mparser.parse_mtd(mtd)
+    mparser.parse_mtd(mtd,options.debug)
     Tables[table]=mparser
     if len(tablefields)==0:
         if options.debug:
@@ -773,7 +773,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             Regenerar = False
             
     if options.debug:
-        print "- ",options.loadbaselec ,table ,os.path.isfile(options.loadbaselec)
+        print "- ",options.loadbaselec ,table 
 
     if options.loadbaselec and table == "baselec":
         if os.path.isfile(options.loadbaselec):
