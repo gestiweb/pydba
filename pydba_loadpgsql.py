@@ -213,7 +213,7 @@ def processsql(pgtext):
 def loadsql1(options, database, pgname, code, sql):    
     global pgobjects
     
-    #print "Iniciando carga del fichero %s . . ." % pgname
+    if options.verbose: print "Iniciando carga del fichero %s . . ." % pgname
     #print sql
     obj = processsql(sql)
     if obj is None:
@@ -301,5 +301,6 @@ def process_create(options,db):
             db.query(obj.create)
         except:
             print "Error creando objeto %s:" % name
+            # print "sql:",obj.create
             print traceback.format_exc()
         
