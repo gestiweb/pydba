@@ -220,9 +220,10 @@ def loadsql1(options, database, pgname, code, sql):
         print "Se encontraron errores al cargar %s." % pgname
         return 
         
+    obj.pgname = pgname
     if obj.name in pgobjects:
-        if options.verbose:
-            print "Ya existe un fichero cargado con el nombre %s. Se sobrescribe." % pgname
+        print "ERROR: Ya existe un fichero cargado con el nombre %s (%s). (original era: %s) " % (obj.name,pgname,pgobjects[obj.name].pgname)
+        return
     pgobjects[obj.name] = obj
             
     #    print "Aviso: Aun no se soporta este tipo de objeto. No se carga."    
