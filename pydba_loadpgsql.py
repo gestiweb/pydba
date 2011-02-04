@@ -15,11 +15,11 @@ def loadpgsqlfile(options, database, pgname, pgtype, pgtext):
     
     if pgtype not in formatos_soportados:
         print "ERROR: Tipo de objeto PgSQL no soportado %s para %s" % (pgtype,pgname)
-        return
+        return 
         
     code, text = extractcode(pgtext)
     
-    formatos_soportados[pgtype](options, database, pgname, code, text)
+    return formatos_soportados[pgtype](options, database, pgname, code, text)
         
 
     
@@ -82,7 +82,7 @@ def loadview(options, database, pgname, code, sql):
         pgobjects[obj.name] = obj
     #if options.transactions:
     #    database.query("RELEASE SAVEPOINT tmp_view;")
-        
+    return True
    
     
     
@@ -94,6 +94,7 @@ def loadview(options, database, pgname, code, sql):
 def loadfunction(options, database, pgname, code, sql):
     print "Iniciando creacion de la funcion %s . . ." % pgname
     print "Aviso: Aun no se soporta este tipo de objeto. No se carga."    
+    return True
     
     
     
@@ -222,9 +223,10 @@ def loadsql1(options, database, pgname, code, sql):
         
     obj.pgname = pgname
     if obj.name in pgobjects:
-        print "ERROR: Ya existe un fichero cargado con el nombre %s (%s). (original era: %s) " % (obj.name,pgname,pgobjects[obj.name].pgname)
+        print "ERROR: Ya existe un fichero cargado con el nombre %s (%s). (original era: %s) " % (obj.name,pgname,pgobjects[obj.name].name)
         return
     pgobjects[obj.name] = obj
+    return True
             
     #    print "Aviso: Aun no se soporta este tipo de objeto. No se carga."    
 

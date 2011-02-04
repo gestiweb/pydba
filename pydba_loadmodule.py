@@ -182,13 +182,18 @@ def load_module_loadone(options,modpath,db, preparse=False):
                     # name.ext1.pgsql
                     # array_name = [ "nombre" , "view" , "pgsql" ]
                     if options.verbose: print "Cargando", root, name
+                    ret = None
                     if len(array_name)==2:
-                        pydba_loadpgsql.loadpgsqlfile(options = options, database = db, pgname = array_name[0], pgtype = "sql1", pgtext = contents_1)
+                        ret = pydba_loadpgsql.loadpgsqlfile(options = options, database = db, pgname = array_name[0], pgtype = "sql1", pgtext = contents_1)
                     elif len(array_name)!=3:
                         print "ERROR: Al cargar un .pgsql Se esperaban 2 o 3 elementos al estilo nombre.view.pgsql o nombre.pgsql y se encontró %s " % name
                         continue
                     else:
-                        pydba_loadpgsql.loadpgsqlfile(options = options, database = db, pgname = array_name[0], pgtype = array_name[1], pgtext = contents_1)
+                        ret = pydba_loadpgsql.loadpgsqlfile(options = options, database = db, pgname = array_name[0], pgtype = array_name[1], pgtext = contents_1)
+                    
+                    if ret != True:
+                        print "ERROR: Errores al cargar el fichero ", root, name
+                        
                         
                         
                         
