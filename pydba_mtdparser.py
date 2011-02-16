@@ -392,6 +392,18 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
                 #else:
                 #    print("WARNING: %s.%s has one relation without "
                 #            "'card' tag" % (table,row['name']))
+        if hasattr(field,"freerelation"):
+            this_field_requires_index = True
+            for relation in field.freerelation:
+                if not hasattr(relation,"card"):
+                    print("WARNING: %s.%s has one free-relation without "
+                            "'card' tag" % (table,row['name']))
+                #if hasattr(relation,"card"):
+                #    if str(relation.card)=='M1':
+                #        this_field_requires_index = True
+                #else:
+                #    print("WARNING: %s.%s has one relation without "
+                #            "'card' tag" % (table,row['name']))
         if unique_index and addchecks==False:
             unique_index = "  "
             
