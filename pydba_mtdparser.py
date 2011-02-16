@@ -410,8 +410,10 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
         if this_field_requires_index:
             indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
                     % (unique_index,table,row['name'],table,row['name'])]
-            indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text));" 
+            if row['type'] in ('string','stringlist','text'):
+                indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text));" 
                         % (table,row['name'],table,row['name'])]
+                        
             if index_adds:                                    
                 indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s %s);" 
                         % (unique_index,table,row['name'],table,row['name'], index_adds)]
