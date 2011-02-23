@@ -407,6 +407,15 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
         if unique_index and addchecks==False:
             unique_index = "  "
             
+        if hasattr(field,"index"):
+            if str(field.index)=="true":
+                this_field_requires_index = True
+            elif str(field.index)=="false":
+                this_field_requires_index = False
+            else:
+                print("WARNING: %s.%s unknown 'index' value: %s" % (table,row['name'],str(field.unique)))
+        
+            
         if this_field_requires_index:
             indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
                     % (unique_index,table,row['name'],table,row['name'])]
