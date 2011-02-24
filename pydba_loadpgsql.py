@@ -278,6 +278,8 @@ def process_dependencies():
 
 def process_drop(options, db):
     global pgobjects,dependency_order
+    if options.safe: # disable drop in safe-mode. 
+        return False
     for name in reversed(dependency_order):
         #print "Borrando objeto", name
         obj = pgobjects[name]
@@ -303,7 +305,8 @@ def process_create(options,db):
         try:
             db.query(obj.create)
         except:
-            print "Error creando objeto %s:" % name
-            # print "sql:",obj.create
-            print traceback.format_exc()
+            if not options.safe or options.verbose: # ignore this error in safe-mode
+                print "Error creando objeto %s:" % name
+                # print "sql:",obj.create
+                print traceback.format_exc()
         

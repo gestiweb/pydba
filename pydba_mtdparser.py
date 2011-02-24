@@ -815,7 +815,11 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             print "ERROR en volcado de Baselec **** no existe el fichero:", options.loadbaselec 
             
 
-     
+    
+    if Regenerar and options.safe:
+        print "WARN: Se iba a regenerar %s , pero safe mode está activo." % table
+        Regenerar = False
+        
     #if options.getdiskcopy and len(mparser.basic_fields)>0 and len(mparser.primary_key)>0:
     #    Regenerar = True
     if Regenerar and options.rebuildalone:
@@ -827,7 +831,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             for row in rows:
                 print row
             Regenerar = False
-        
+    
     if Regenerar:
         try:
             ltable = table
