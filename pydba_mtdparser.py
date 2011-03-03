@@ -689,8 +689,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             if str(field.default) == "null": default_value = "NULL"
             else:
                 default_value = "'" + pg.escape_string(str(field.default)) + "'"
-            if options.verbose:
-                print "Asumiendo valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
+            if options.debug and options.verbose:
+                print "Leido valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
         else:            
             default_value = "NULL"
         
@@ -708,6 +708,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 default_value = "'00:00:01'"
             else:
                 default_value = "'0'"
+            if options.debug:
+                print "Asumiendo valor por defecto %s  para la columna %s tabla %s"  % (default_value,name,table)
         
         if not tablefields.has_key(name):
             if mfield.pk:

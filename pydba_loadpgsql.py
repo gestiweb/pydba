@@ -214,7 +214,7 @@ def processsql(pgtext):
 def loadsql1(options, database, pgname, code, sql):    
     global pgobjects
     
-    if options.verbose: print "Iniciando carga del fichero %s . . ." % pgname
+    if options.debug: print "Iniciando carga del fichero %s . . ." % pgname
     #print sql
     obj = processsql(sql)
     if obj is None:

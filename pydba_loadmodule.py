@@ -181,7 +181,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
                     array_name=name.split(".")
                     # name.ext1.pgsql
                     # array_name = [ "nombre" , "view" , "pgsql" ]
-                    if options.verbose: print "Cargando", root, name
+                    if options.verbose: print "Cargando PGSQL: ", os.path.join(root, name)
                     ret = None
                     if len(array_name)==2:
                         ret = pydba_loadpgsql.loadpgsqlfile(options = options, database = db, pgname = array_name[0], pgtype = "sql1", pgtext = contents_1)
