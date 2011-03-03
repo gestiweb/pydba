@@ -362,8 +362,9 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
                 
             if str(field.pk)=='true':
                 ispkey = True
-                this_field_requires_index = True
-                unique_index = " UNIQUE "
+                # Si tiene constraint, tiene internamente un indice asociado. 
+                #this_field_requires_index = True
+                #unique_index = " UNIQUE "
                 random.seed()
                 rn1 = random.randint(0,16**4)
                 rn2 = random.randint(0,16**4)                
@@ -561,8 +562,6 @@ Tables={}
         
         
 def load_mtd(options,odb,ddb,table,mtd_parse):
-    if options.verbose:
-        print "Analizando tabla %s . . ." % table
     fail = False
     mtd=mtd_parse.root.tmd
     if table!=table.lower():
@@ -575,10 +574,18 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         # Probablemente se puede ignorar las cargas de estas queries. No son tablas en realidad.    
         if str(mtd.name)==table:
             print "ERROR: MTD Query Filename '%s' HAS BEEN FOUND in the <name> attribute: '%s' ***" % (table,str(mtd.name))
+        return False
     else:
         if str(mtd.name)!=table:
             print "ERROR: Expected '%s' in MTD name but '%s' found ***" % (table,str(mtd.name))
         
+    if str(getattr(mtd,"create","true")) == "false":
+        if options.verbose:
+            print "Ignorando seguimiento de tabla %s." % table
+        return False
+        
+    if options.debug:
+        print "Analizando tabla %s . . ." % table
     
     qry_columns=ddb.query("SELECT * from information_schema.columns"
                 " WHERE table_schema = 'public' AND table_name='%s'" % table)
@@ -986,7 +993,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     if rows1 != rows2:
                         print "WARN: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se intentará manualmente." % (rows2,rows1)
                         fail1 = True
-                
+                    else:
+                        odb.query("VACUUM ANALYZE %s" % table)
+                         
                 if fail1: 
                     fail = True
                     fail1 = False
