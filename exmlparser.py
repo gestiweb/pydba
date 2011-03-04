@@ -75,6 +75,8 @@ class XMLParser:
         
         
     def char_data(self,data):
+        data=data.replace("\n"," ")
+        data=data.strip()
         atext=data.split(";")
         ret=[]
         for text in atext:
@@ -83,7 +85,9 @@ class XMLParser:
                 ret+=[QT_TRANSLATE_NOOP(m.group(1),m.group(2))]
         if len(ret):
             data=";".join(ret)
-        self.xmlusing._data=data        
+        self.xmlusing._data =  self.xmlusing._data.strip()
+        self.xmlusing._data+=" " + data        
+        self.xmlusing._data =  self.xmlusing._data.strip()
     
     def __init__(self, name="noname"):
         self.name = name

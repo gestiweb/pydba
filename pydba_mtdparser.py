@@ -277,7 +277,7 @@ class MTDParser:
         
 
 # Crea una tabla según las especificaciones del MTD
-def create_table(db,table,mtd,oldtable=None,addchecks = False):
+def create_table(db,table,mtd,oldtable=None,addchecks = False, issue_create = True):
     txtfields=[]
     typetr={
         'string'    : 'character varying',
@@ -499,27 +499,83 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False):
             indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
                     % (unique,table,composedfieldname2,table,composedfieldname)]
     
-        
+    if hasattr(mtd,"index"):
+        n = 0
+        for index in mtd.index:
+            n += 1
+            name = str(getattr(index,"name",""))
+            unique = str(getattr(index,"unique","false"))
+            concurrent = str(getattr(index,"concurrent","false"))
+            method = str(getattr(index,"method",""))
+            columns = str(getattr(index,"columns","NO COLUMNS FOUND!"))
+            fillfactor = str(getattr(index,"fillfactor",""))
+            where = str(getattr(index,"where",""))
+            tablespace = str(getattr(index,"tablespace",""))
+            
+            ir = {}
+            if not name: name = "userindex%02d" % n
+            ir['name'] = "%s_%s_idx" % (table,name)
+            ir['table'] = table
+            if method:
+                ir['method'] = " USING %s " % method
+            else:
+                ir['method'] = ""
+            ir['columns'] = columns
+            if unique[0].lower() == "t": ir['unique'] = " UNIQUE " 
+            else: ir['unique'] = " "
+            
+            if concurrent[0].lower() == "t": ir['concurrent'] = " CONCURRENTLY " 
+            else: ir['concurrent'] = " "
+            withparam = {}
+            if fillfactor:
+                withparam['fillfactor'] = fillfactor
+            
+            if withparam:
+                ir['with'] = " WITH ( %s) " % ", ".join([ "%s = %s" % (k,v) for k,v in withparam.iteritems() ])
+            else:
+                ir['with'] = ""
+            
+            if tablespace:
+                ir['tablespace'] = " TABLESPACE %s " % tablespace
+            else:
+                ir['tablespace'] = ""
+                
+            if where:
+                ir['where'] = " WHERE %s " % where
+            else:
+                ir['where'] = ""
+
+            sql = """
+            CREATE %(unique)s INDEX %(concurrent)s %(name)s ON %(table)s %(method)s
+                ( %(columns)s ) %(with)s
+            %(tablespace)s
+            %(where)s ;
+            """ % ir
+            #print sql
+            indexes.append(sql)
+            
         
     
-    for drop in drops:
-        try:
-            db.query(drop)
-        except:
-            pass
-            #print "ERROR:", drop , " .. execution failed:"
-            #traceback.print_exc(file=sys.stdout)
-            #print "-------"
+    
+    if issue_create:
+        for drop in drops:
+            try:
+                db.query(drop)
+            except:
+                pass
+                #print "ERROR:", drop , " .. execution failed:"
+                #traceback.print_exc(file=sys.stdout)
+                #print "-------"
             
     txtfields+=constraints
     txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS;" % (table, ",\n".join(txtfields))
     
-    
-    try:
-        db.query(txtcreate)
-    except:
-        print txtcreate
-        raise     
+    if issue_create:
+        try:
+            db.query(txtcreate)
+        except:
+            print txtcreate
+            raise     
                
     return indexes
 
@@ -860,7 +916,23 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         
         
         
-        
+    if options.reindex and not Regenerar:
+        qry_indexes = ddb.query("""
+            SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
+            FROM pg_class pc 
+            INNER JOIN pg_index pi ON pc.oid=pi.indrelid 
+            INNER JOIN pg_class pc2 ON pi.indexrelid=pc2.oid
+            WHERE NOT pi.indisprimary AND NOT pi.indisunique
+            AND pc.relname = '%s'
+                """ % table)
+        dt_indexes=qry_indexes.dictresult() 
+        if options.verbose: 
+            print "Reindexing table %s . . ." % table
+        for fila in dt_indexes:
+            ddb.query("DROP INDEX %s;" % fila['indice'])
+        indexes = create_table(ddb,table,mtd,oldtable=table,addchecks = options.addchecks, issue_create = False)
+        create_indexes(ddb,indexes, table)
+    
     if Regenerar:
         indexes = []
         qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
@@ -869,17 +941,17 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if existent_rows < 1 :
             Regenerar = False
             try:
-              ddb.query("DROP TABLE %s CASCADE;" % (table))
+                ddb.query("DROP TABLE %s CASCADE;" % (table))
             except:
-              print "No se pudo borrar la tabla antigua." , table
+                print "No se pudo borrar la tabla antigua." , table
             try:
-              indexes = create_table(ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
+                indexes = create_table(ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
             except:
-              print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
-              why = traceback.format_exc()
-              print "**** Motivo:" , why
+                print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
+                why = traceback.format_exc()
+                print "**** Motivo:" , why
             if not create_indexes(ddb,indexes, table): 
-              print "No se pudieron crear todos los indices."
+                print "No se pudieron crear todos los indices."
         
     if Regenerar:
         try:       

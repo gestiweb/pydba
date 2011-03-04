@@ -67,12 +67,16 @@ def main():
                         addchecks=False,
                         preparse = False,
                         rebuildalone  = False,
+                        reindex = False,
                         transactions = False,
                         files_loaded=[],
                         modules={}
                         )
-    parser.add_option("--rebuildalone", help="Disallow rebuilds if other users are connected"
+    parser.add_option("--rebuildalone", help="Forbid rebuilds if other users are connected"
                         ,dest="rebuildalone", action="store_true")
+                        
+    parser.add_option("--reindex", help="Drop indexes and create them again whenever the MTD file is processed"
+                        ,dest="reindex", action="store_true")
                         
     parser.add_option("--diskcopy", help="Create a backup .pydbabackup"
                         ,dest="diskcopy", action="store_true")
