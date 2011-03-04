@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 import re, traceback
+import pg       # depends - python-pygresql
 
 pgobjects = {}
 dependency_order = [] # En orden de creación
+idxfullfilename = {}
 
-def loadpgsqlfile(options, database, pgname, pgtype, pgtext):
+def loadpgsqlfile(options, database, pgname, pgtype, pgtext, fullfilename):
     #print "--- Llamada a loadpgsqlfile" 
     #print " --- tipo: ", pgtype
     #print " --- name: ", pgname
@@ -19,6 +21,8 @@ def loadpgsqlfile(options, database, pgname, pgtype, pgtext):
         
     code, text = extractcode(pgtext)
     
+    if pgname not in idxfullfilename: idxfullfilename[pgname] = []
+    idxfullfilename[pgname].append(fullfilename)
     return formatos_soportados[pgtype](options, database, pgname, code, text)
         
 
@@ -274,7 +278,10 @@ def process_dependencies():
             pOrigen.remove((name,depends))
     
     dependency_order = pDestino
-            
+
+def filename(pgname):
+    global idxfullfilename
+    return ":".join(idxfullfilename[pgname])            
 
 def process_drop(options, db):
     global pgobjects,dependency_order
@@ -285,11 +292,17 @@ def process_drop(options, db):
         obj = pgobjects[name]
         try:
             db.query(obj.drop)
-        except:
-            if options.verbose:
-                print "WARN: Error borrando objeto %s:" % name
-                print traceback.format_exc()
-        
+        except pg.ProgrammingError, e:
+            if e.args[0].startswith("ERROR:  no existe"):
+                debug = False
+                if options.verbose:
+                    print "INFO: objeto '%s' aun no existe: " % name, e.args[0].strip()
+            else:
+                print "ERROR: Error borrando objeto '%s':" % name, filename(name)
+                debug = True
+            if debug:
+                print e.args[0].strip()
+                if len(e.args) > 1 and e.args[1]:print e.args[1]
         
         
         
@@ -306,7 +319,7 @@ def process_create(options,db):
             db.query(obj.create)
         except:
             if not options.safe or options.verbose: # ignore this error in safe-mode
-                print "Error creando objeto %s:" % name
+                print "Error creando objeto %s:" % name, filename(name)
                 # print "sql:",obj.create
                 print traceback.format_exc()
         
