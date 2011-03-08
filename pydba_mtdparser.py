@@ -277,7 +277,7 @@ class MTDParser:
         
 
 # Crea una tabla según las especificaciones del MTD
-def create_table(db,table,mtd,oldtable=None,addchecks = False, issue_create = True):
+def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_create = True):
     txtfields=[]
     typetr={
         'string'    : 'character varying',
@@ -457,7 +457,8 @@ def create_table(db,table,mtd,oldtable=None,addchecks = False, issue_create = Tr
             
                 
         if calculated and not canbenull:
-            print "INFO: Si la columna %s.%s es calculada, debe admitir NULL." % (table,str(field.name))
+            if options.verbose:
+                print "INFO: Si la columna %s.%s es calculada, debe admitir NULL." % (table,str(field.name))
             canbenull = True
             
         if hasattr(field,"default"):
@@ -691,7 +692,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if (options.debug):
             print "Creando tabla '%s' ..." % table
         try:
-            idx = create_table(ddb,table,mtd, addchecks = options.addchecks)
+            idx = create_table(options,ddb,table,mtd, addchecks = options.addchecks)
             create_indexes(ddb,idx,table)
         except:
             print "Error no esperado!"
@@ -841,7 +842,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         #print "*****"
         #for atr in dir(field):
         #    if (atr[0]!='_'):
-        #        prin create_table(db,table,mtd)t "%s : '%s'" % (atr,getattr(field,atr))
+        #        prin create_table(options,db,table,mtd)t "%s : '%s'" % (atr,getattr(field,atr))
         
     
     if len(mparser.basic_fields)==0:
@@ -916,7 +917,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         
         
         
-    if options.reindex and not Regenerar:
+    if not Regenerar:
+        reindex = options.reindex
         qry_indexes = ddb.query("""
             SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
             FROM pg_class pc 
@@ -926,12 +928,39 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             AND pc.relname = '%s'
                 """ % table)
         dt_indexes=qry_indexes.dictresult() 
-        if options.verbose: 
-            print "Reindexing table %s . . ." % table
-        for fila in dt_indexes:
-            ddb.query("DROP INDEX %s;" % fila['indice'])
-        indexes = create_table(ddb,table,mtd,oldtable=table,addchecks = options.addchecks, issue_create = False)
-        create_indexes(ddb,indexes, table)
+        indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = options.addchecks, issue_create = False)
+        if not reindex:
+            i_names = []
+            i_names2 = [ r['indice'] for r in dt_indexes ] 
+
+            idx_name = {}
+            for index in indexes:
+                y = [ n for n in index.split(" ") if n.startswith(table+"_") and n.endswith("idx") ]
+                x = y[0][:63]
+                i_names.append(x)
+                idx_name[x] = index
+                
+            i_add = set(i_names) - set(i_names2)
+            i_del = set(i_names2) - set(i_names)
+            if options.verbose:
+                if i_del: print "Indexes of table", table,": to delete::", i_del
+                if i_add: print "Indexes of table", table,": to append::", i_add
+            if i_del or i_add: 
+                print "Reindexing table %s . . . (%d added, %d removed)" % (table,len(i_add), len(i_del))
+
+                for idx in i_del:
+                    ddb.query("DROP INDEX \"%s\";" % idx)
+                
+                add_indexes = [ idx_name[name] for name in i_add ]
+                    
+                create_indexes(ddb,add_indexes, table)
+            
+        if reindex:
+            print "Reindexing table %s . . . (full reindex)" % table
+            for fila in dt_indexes:
+                ddb.query("DROP INDEX %s;" % fila['indice'])
+        
+            create_indexes(ddb,indexes, table)
     
     if Regenerar:
         indexes = []
@@ -945,7 +974,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             except:
                 print "No se pudo borrar la tabla antigua." , table
             try:
-                indexes = create_table(ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
+                indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
             except:
                 print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
                 why = traceback.format_exc()
@@ -994,7 +1023,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     except:
                         pass
             try:
-              indexes = create_table(ddb,table,mtd,oldtable=newnametable,addchecks = options.addchecks)
+              indexes = create_table(options,ddb,table,mtd,oldtable=newnametable,addchecks = options.addchecks)
             except:
               fail = True
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
