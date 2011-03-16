@@ -414,7 +414,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             elif str(field.index)=="false":
                 this_field_requires_index = False
             else:
-                print("WARNING: %s.%s unknown 'index' value: %s" % (table,row['name'],str(field.unique)))
+                print("WARNING: %s.%s unknown 'index' value: %s" % (table,row['name'],str(field.index)))
         
             
         if this_field_requires_index:
