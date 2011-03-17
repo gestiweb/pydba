@@ -363,7 +363,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             if str(field.pk)=='true':
                 ispkey = True
                 # Si tiene constraint, tiene internamente un indice asociado. 
-                #this_field_requires_index = True
+                this_field_requires_index = True # se habilita por compatibilidad con abanQ
                 #unique_index = " UNIQUE "
                 random.seed()
                 rn1 = random.randint(0,16**4)
