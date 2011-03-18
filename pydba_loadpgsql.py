@@ -281,6 +281,10 @@ def process_dependencies():
 
 def filename(pgname):
     global idxfullfilename
+    if pgname not in idxfullfilename:
+        print "PyDBA internal error: %s not found on filename index !" % pgname
+        print ", ".join(idxfullfilename.keys())
+        return pgname
     return ":".join(idxfullfilename[pgname])            
 
 def process_drop(options, db):
