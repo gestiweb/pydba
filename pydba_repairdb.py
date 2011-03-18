@@ -222,7 +222,6 @@ def repair_db(options,ddb=None,mode=0,odb=None):
                 print "SQL:"
                 print sql
         
-        
         sql = """
         ALTER TABLE %(table_name)s DROP CONSTRAINT %(constraint_name)s;
         ALTER TABLE %(table_name)s ADD PRIMARY KEY (%(column_name)s);
@@ -230,6 +229,10 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         try: 
             ddb.query(sql)
             print "PK Regenerado: %(constraint_name)s" % row
+            try:
+                ddb.query("ALTER INDEX %(table_name)s_pkey SET (fillfactor = 80);" % row)
+            except:
+                pass
         except:
             print "Error en query corrigiendo pkey:", row
             print traceback.format_exc()

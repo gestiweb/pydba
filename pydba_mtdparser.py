@@ -295,6 +295,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
     drops=[]
     ck = [] 
     fieldnames = []
+    pkeyname = "%s_pkey" % table
     for field in mtd.field:
         if str(field.name).lower() in fieldnames:
             print "FATAL: El campo %s en la tabla %s ha aparecido más de 1 vez!!" % (str(field.name), table)
@@ -308,7 +309,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
         field_ck = getattr(field,"ck",'None')
         ispkey = False
         isunique = False
-        
+        index_options = []
         #print "CK %s.%s %s" % (table,row['name'],str(field.ck))
         if type(field_ck) is list: 
             field_ck = field_ck[0]
@@ -365,10 +366,14 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
                 # Si tiene constraint, tiene internamente un indice asociado. 
                 this_field_requires_index = True # se habilita por compatibilidad con abanQ
                 #unique_index = " UNIQUE "
-                random.seed()
-                rn1 = random.randint(0,16**4)
-                rn2 = random.randint(0,16**4)                
-                constraints+=["CONSTRAINT %s_pkey_%04x%04x PRIMARY KEY (%s)" % (table,rn1,rn2,row['name'])]
+                
+                for dbrow in db.query("SELECT relname FROM pg_class WHERE relname = '%s'" % pkeyname).getresult():
+                    random.seed()
+                    rn1 = random.randint(0,16**4)
+                    rn2 = random.randint(0,16**4)             
+                    pkeyname = "%s_pkey_%04x%04x" % (table,rn1,rn2)
+                   
+                constraints+=["CONSTRAINT %s PRIMARY KEY (%s)" % (pkeyname,row['name'])]
 
         if hasattr(field,"unique"):
             if str(field.unique)=='true':
@@ -409,7 +414,8 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             unique_index = "  "
             
         if hasattr(field,"index"):
-            if str(field.index)=="true":
+            if str(field.index) in ["true","fastwrite"]:
+                if str(field.index) == 'fastwrite': index_options.append('fastwrite')
                 this_field_requires_index = True
             elif str(field.index)=="false":
                 this_field_requires_index = False
@@ -418,15 +424,17 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
         
             
         if this_field_requires_index:
-            indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s);" 
-                    % (unique_index,table,row['name'],table,row['name'])]
-            if row['type'] in ('string','stringlist','text'):
-                indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text));" 
-                        % (table,row['name'],table,row['name'])]
-                        
-            if index_adds:                                    
-                indexes+=["CREATE %s INDEX %s_%s_m1_idx ON %s (%s %s);" 
-                        % (unique_index,table,row['name'],table,row['name'], index_adds)]
+            if row['type'].startswith("character varying") and 'fastwrite' not in index_options:
+                indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text) %s);" 
+                        % (table,row['name'],table,row['name'], index_adds)]
+            concurrent = ""
+            options_with = ""
+            if 'fastwrite' in index_options:
+                options_with = "WITH (fillfactor = 60)"
+                # concurrent = "CONCURRENTLY"
+            indexes+=["CREATE %s INDEX %s %s_%s_m1_idx ON %s (%s) %s;" 
+                    % (unique_index,concurrent,table,row['name'],table,row['name'], options_with)]
+                    
         calculated = None
         if hasattr(field,"calculated"):
             if str(field.calculated) == "true": calculated = True
@@ -569,14 +577,22 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
                 #print "-------"
             
     txtfields+=constraints
-    txtcreate="CREATE TABLE %s (%s) WITHOUT OIDS;" % (table, ",\n".join(txtfields))
+    txtcreate="CREATE TABLE %s (%s) WITH (fillfactor = 90,  OIDS=FALSE) ;" % (table, ",\n".join(txtfields))
     
     if issue_create:
         try:
             db.query(txtcreate)
-        except:
-            print txtcreate
+        except Exception, e:
+            print e, txtcreate
             raise     
+        sql = "ALTER INDEX %s SET (fillfactor = 80);" % (pkeyname)
+        try:
+            db.query(sql)
+        except Exception, e:
+            print e
+            print txtcreate
+            print sql
+            
                
     return indexes
 
