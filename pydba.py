@@ -3,10 +3,52 @@
 
 # import ConfigParser
 import pg
+import ConfigParser
 
-psql = pg.connect(dbname='x_trasluz2', host='192.168.3.13', user='gestiweb', passwd='')
-conectbd = pg.connect(dbname='x_trasluz', host='192.168.3.13', user='gestiweb', passwd='')
-#dbsql = pg.DB(dbname='x_trasluz3', host='192.168.3.13', user='gestiweb', passwd='')
+ini = ConfigParser.ConfigParser()
+ini.readfp(open('replicas.ini'))
+
+secciones=ini.sections()
+
+for seccion in secciones:
+  #print "* " + seccion
+  items_seccion=ini.items(seccion)
+  tsec=seccion.split(".")
+  tipoSeccion=tsec[0]
+  nombreSeccion=tsec[1]
+  if tipoSeccion=="mod":
+     
+    for tabla in items_seccion:
+      if tabla[1]=="Yes":
+        print tabla[0] + " => " + tabla[1]
+  
+  if tipoSeccion=="db":
+    configdb={}
+    for item in items_seccion:
+      configdb[item[0]]=item[1]
+    
+    if nombreSeccion=="origen":
+       configdborigen = configdb
+       
+    if nombreSeccion=="destino":
+       configdbdestino = configdb
+       
+
+
+
+psql = pg.connect(
+            dbname=configdbdestino['dbname'], 
+            port=int(configdbdestino['port']),
+            host=configdbdestino['host'], 
+            user=configdbdestino['user'], 
+            passwd=configdbdestino['passwd']
+            )
+conectbd = pg.connect(
+            dbname=configdborigen['dbname'], 
+            port=int(configdborigen['port']),
+            host=configdborigen['host'], 
+            user=configdborigen['user'], 
+            passwd=configdborigen['passwd'])
 
 qry_tablas = psql.query(
   "select table_name from information_schema.tables"   
@@ -22,7 +64,7 @@ for tupla in tupla_tablas:
   
 for tabla in tablas:
   print tabla
-  qry_deltables= psql.query("delete from %s" % tabla)
+  #qry_deltables= psql.query("delete from %s" % tabla)
   qry_seltables= conectbd.query("select * from %s" % tabla)
   filas=qry_seltables.getresult()
   if(tabla == 'flfiles' or tabla == 'flmodules'):
@@ -43,9 +85,10 @@ for tabla in tablas:
       if tabla == 'flmodules':  
         sql_text="insert into %(tabla)s (bloqueo , idmodulo , idarea , descripcion , version, icono ) values(%(0)s,%(1)s,%(2)s,%(3)s,%(4)s,%(5)s);" % valores
       # print sql_text
-      qry_instables=psql.query(sql_text)
+      #qry_instables=psql.query(sql_text)
       
   else:
-    psql.inserttable(tabla,filas)
+    print tabla
+    #psql.inserttable(tabla,filas)
 
 
