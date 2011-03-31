@@ -68,6 +68,43 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         print "Inicializando reparación de la base de datos '%s'..." % options.ddb
         print " * Calcular firmas SHA1 de files y metadata"
     
+    if options.debug:
+        print "* Revisando si existe una tabla de servidores réplica ..."
+    tabla = None
+    qry1 =ddb.query("SELECT relname FROM pg_class WHERE relname ='servidoresreplica'");
+    for row in qry1.dictresult():
+        tabla = row['relname']
+    
+    if tabla:
+        if options.debug:
+            print "Encontrada una tabla %s." % tabla
+        qry1 =ddb.query("SELECT codservidor, activo, numero  FROM %s " % tabla);
+        servsize = len(qry1.dictresult())
+        servnumber = -1
+        for row in qry1.dictresult():
+            if row['activo']:
+                servnumber = row['numero']
+        activar_servrep = True
+        if servsize < 1 or servsize > 10:
+            activar_servrep = False
+            print "WARN: No se activa la sincronización de secuencia para replicación master-master por error en la cantidad de servidores (%d)" % servsize
+            
+        if servnumber < 0 or servnumber >= servsize:
+            activar_servrep = False
+            print "WARN: No se activa la sincronización de secuencia para replicación master-master por error el numero de este servidor (%d/%d)" % (servnumber,servsize)
+        
+        if activar_servrep:
+            if options.verbose:
+                print "INFO: Activando sincro. de secuencias en configuracion: %d/%d" % (servnumber,servsize)
+                options.seqsync = (servnumber,servsize)
+        
+    else:
+        if options.debug:
+            print "No se encontró tabla de servidores de replica"
+            
+        
+    
+    
     if options.transactions: 
         odb.query("BEGIN;");
         try:

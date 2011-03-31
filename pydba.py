@@ -70,6 +70,7 @@ def main():
                         reindex = False,
                         transactions = False,
                         files_loaded=[],
+                        seqsync = None,
                         modules={}
                         )
     parser.add_option("--rebuildalone", help="Forbid rebuilds if other users are connected"

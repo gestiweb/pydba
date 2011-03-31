@@ -1617,8 +1617,20 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                         for dmaxserial in dr_maxserial:
                             if dmaxserial['max']:
                                 max_serial=dmaxserial['max']+1
-    
-                        ddb.query("ALTER SEQUENCE %s RESTART WITH %d;" % (serial, max_serial))
+                        increment = 1
+                        if options.seqsync:
+                            servernumber, serversize = options.seqsync
+                            increment = serversize
+                            auxv1 = 0 
+                            while max_serial % increment != servernumber and auxv1 < 20:
+                                max_serial += 1
+                                auxv1 += 1
+                            if auxv1 > 15: 
+                                print "PANIC: Error en calculo de max_serial!!!"
+                        if options.verbose:
+                            print "INFO: Actualizando %s a %d (+%d)" % (serial, max_serial, increment)
+                            
+                        ddb.query("ALTER SEQUENCE %s INCREMENT BY %d RESTART WITH %d;" % (serial, increment, max_serial))
     except:
         print "Fieldname, table:",tfield.name,table
         print "PKeys: %s" % mparser.primary_key
