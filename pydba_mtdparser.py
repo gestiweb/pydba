@@ -1997,8 +1997,18 @@ def procesarOLAP(db):
 
 def procesarRelacionesTabla(tables, crelation):
     global Tables
-    rparents = tables[crelation['ntable']]["parents"]
-    rchilds = tables[crelation['table']]["childs"]
+    if crelation['ntable'] in tables:
+        rparents = tables[crelation['ntable']]["parents"]
+    else:
+        print "WARN: Table %s unknown!" % (repr(crelation['ntable']))
+        rparents = []
+        
+    if crelation['table'] in tables:
+        rchilds = tables[crelation['table']]["childs"]
+    else:
+        print "WARN: Table %s unknown!" % (repr(crelation['table']))
+        rchilds = []
+        
     try:
         crelation['default'] = str(Tables[crelation['ntable']].field[crelation['nfield']].default)
     except:
