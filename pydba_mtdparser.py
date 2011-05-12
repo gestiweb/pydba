@@ -1613,10 +1613,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                             
                         qry_maxserial=ddb.query("SELECT MAX(%s) as max FROM %s" % (tfield.name,table))
                         max_serial=1
+                        prev_max = 1
                         dr_maxserial=qry_maxserial.dictresult()
                         for dmaxserial in dr_maxserial:
                             if dmaxserial['max']:
-                                max_serial=dmaxserial['max']+1
+                                prev_max=dmaxserial['max']+1
+                                max_serial=prev_max
+                                
                         increment = 1
                         if options.seqsync:
                             servernumber, serversize = options.seqsync
@@ -1628,7 +1631,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                             if auxv1 > 15: 
                                 print "PANIC: Error en calculo de max_serial!!!"
                         if options.verbose:
-                            print "INFO: Actualizando %s a %d (+%d)" % (serial, max_serial, increment)
+                            print "INFO: Actualizando %s de %d a %d (+%d)" % (serial, prev_max, max_serial, increment)
                             
                         ddb.query("ALTER SEQUENCE %s INCREMENT BY %d RESTART WITH %d;" % (serial, increment, max_serial))
     except:

@@ -78,12 +78,23 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     if tabla:
         if options.debug:
             print "Encontrada una tabla %s." % tabla
-        qry1 =ddb.query("SELECT codservidor, activo, numero  FROM %s " % tabla);
+        qry1 =ddb.query("SELECT codservidor, activo, numero  FROM %s" % tabla);
         servsize = len(qry1.dictresult())
         servnumber = -1
+        servname = None
         for row in qry1.dictresult():
-            if row['activo']:
+            if row['activo'] == 't':
+                try:
+                    assert(servnumber == -1)
+                except AssertionError:
+                    print "PANIC: Hay mas de un servidor activo! El valor anterior era %s el nuevo %s. (activo vale %s)" % (
+                        repr(servnumber),
+                        repr(row['numero']),
+                        repr(row['activo'])
+                        )
+                    raise
                 servnumber = row['numero']
+                servname = row['codservidor']
         activar_servrep = True
         if servsize < 1 or servsize > 10:
             activar_servrep = False
@@ -94,9 +105,8 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             print "WARN: No se activa la sincronización de secuencia para replicación master-master por error el numero de este servidor (%d/%d)" % (servnumber,servsize)
         
         if activar_servrep:
-            if options.verbose:
-                print "INFO: Activando sincro. de secuencias en configuracion: %d/%d" % (servnumber,servsize)
-                options.seqsync = (servnumber,servsize)
+            print "INFO: Activando sincro. de secuencias para %s: %d/%d" % (repr(servname), servnumber,servsize)
+            options.seqsync = (servnumber,servsize)
         
     else:
         if options.debug:
