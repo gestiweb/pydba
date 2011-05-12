@@ -125,7 +125,10 @@ def main():
         ,dest="action", help="load modules")
         
     g_action.add_option("-O","--olap", action="store_const", const="setup_olap"
-        ,dest="action", help="setup olap tables")
+        ,dest="action", help="setup olap tables (obsolete, use -Y)")
+        
+    g_action.add_option("-Y","--export-yaml", action="store_const", const="setup_olap"
+        ,dest="action", help="export metadata as Yaml")
         
     g_action.add_option("-r","--reload-mtd", action="store_const", const="reload_mtd"
         ,dest="action", help="Parses MTD files on DB and complete tables")
