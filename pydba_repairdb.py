@@ -13,7 +13,166 @@ import traceback
 import pydba_loadpgsql
 #    *************************** REPAIR DATABASE *****
 #    
+import os, os.path
+
+
+def dump_db(options,odb=None):
+    if (options.verbose):
+        print "-> DumpDB"
+    if (not odb):
+        if (not options.odb):
+            print "RepairDB requiere una base de datos de origen y no proporcionó ninguna."
+            return 0
+        odb=odbconnect(options)
+        if (not odb): 
+            return 0
     
+    #Areas: ('descripcion', 'bloqueo', 'idarea')
+    #Modules: ('version', 'icono', 'descripcion', 'idmodulo', 'bloqueo', 'idarea')
+    #Files: ('sha', 'idmodulo', 'contenido', 'bloqueo', 'nombre')
+    
+    # Obtener areas
+    qry_oareas=odb.query("SELECT * FROM flareas")
+    areas = {}
+    for area in qry_oareas.dictresult():
+        key = area["idarea"]
+        areas[key] = area
+    
+    
+    print "Areas:", qry_oareas.listfields()
+    # Obtener areas
+    qry_omodulos=odb.query("SELECT * FROM flmodules")
+    modules = {}
+    for module in qry_omodulos.dictresult():
+        
+        key = module["idmodulo"]
+        modules[key] = module
+    print "Modules:", qry_omodulos.listfields()
+    # Obtener los ficheros nuevos
+    qry_ofiles =odb.query("SELECT * FROM flfiles")
+    print "Files:", qry_ofiles.listfields()
+    
+    files = {}
+    for file1 in qry_ofiles.dictresult():
+        key = file1["nombre"]
+        files[key] = file1
+    
+    folder_area = {
+            'sys' : 'sistema',
+            'C' : 'contabilidad',
+            'F' : 'facturacion',
+            'L' : 'colaboracion',
+        }
+    folder_module = {
+        'flar2kut' : 'informesar',
+        'sys' : 'administracion',
+        'flcontacce' : 'contacceso',
+        'fl_a3_nomi' : 'nominasa3',
+        'flcontppal' : 'principal',
+        'flcontmode' : 'modelos',
+        'flcontinfo' : 'informes',
+        'flcolagedo' : 'gesdoc',
+        'flfactppal' : 'principal',
+        'flfactalma' : 'almacen',
+        'flfactteso' : 'tesoreria',
+        'flfactinfo' : 'informes',
+        'flfacturac' : 'facturacion',
+        
+        }
+    folder_ext = {
+        '.kut' : "reports",
+        '.ar' : "reports",
+        '.mtd' : "tables",
+        '.qry' : "queries",
+        '.qs' : "scripts",
+        '.ts' : "translations",
+        '.ui' : "forms",
+        '.xml' : ".",
+        '.doc' : "docs",
+        '.csv' : "docs",
+        '.txt' : "docs",
+        '.odt' : "docs",
+        '.pgsql' : "pgsql",
+        '.sql' : "pgsql",
+        '.jrxml' : "ireports",
+        '.jasper' : "ireports",
+        
+        }
+    utf8_ext = [".ui", ".ts"]
+    
+    for areakey,area in areas.iteritems():
+        foldername = folder_area.get(areakey,areakey).lower()
+        print "Area %s - %s (%s)... " % (areakey, area['descripcion'],foldername)
+        create_folder(foldername)
+        for modulekey, module in modules.iteritems():
+            if module['idarea'] != areakey: continue
+            module_folder = os.path.join(foldername, folder_module.get(modulekey,modulekey).lower())
+            print "Module %s - %s (%s) ..." % (modulekey, module['descripcion'],module_folder)
+            create_folder(module_folder)
+            file_icono = open(os.path.join(module_folder,"%s.xpm" % modulekey),"w")
+            file_icono.write(module['icono'])
+            file_icono.close()
+            
+            compuesto = {}
+            compuesto.update(area)
+            compuesto.update(module)
+            compuesto["area_descripcion"] = area["descripcion"]
+            compuesto["module_descripcion"] = module["descripcion"]
+            
+            file_mod = open(os.path.join(module_folder,"%s.mod" % modulekey),"w")
+            txt = """<!DOCTYPE MODULE>
+<MODULE>
+        <name>%(idmodulo)s</name>
+        <alias>QT_TRANSLATE_NOOP("FLWidgetApplication","%(module_descripcion)s")</alias>
+        <area>%(idarea)s</area>
+        <areaname>QT_TRANSLATE_NOOP("FLWidgetApplication","%(area_descripcion)s")</areaname>
+        <version>%(version)s</version>
+        <icon>%(idmodulo)s.xpm</icon>
+        <flversion>%(version)s</flversion>
+        <dependencies />
+        <description>%(module_descripcion)s</description>
+</MODULE>
+                """ % compuesto
+            utxt = unicode(txt,"UTF8")
+            txt= utxt.encode("cp1252", "xmlcharrefreplace")
+            file_mod.write( txt )
+            file_mod.close()
+            files_by_ext = {}
+            for filekey, file1 in files.iteritems():
+                if file1['idmodulo'] != modulekey: continue
+                root, ext = os.path.splitext(filekey)
+                if ext not in files_by_ext:
+                    files_by_ext[ext] = []
+                files_by_ext[ext].append(file1)
+            
+            for ext, file_list in sorted(files_by_ext.iteritems()):
+                ext_folder = os.path.join(module_folder,folder_ext.get(ext,"others"))
+                #print "Extension %s (%s)" % (ext,ext_folder)
+                create_folder(ext_folder)
+                
+                for fileobj in file_list:
+                    file_1 = open(os.path.join(ext_folder,fileobj['nombre']),"w")
+                    txt = fileobj['contenido']
+                    
+                    utxt = unicode(txt,"UTF8")
+                    txt= utxt.encode("cp1252", "xmlcharrefreplace")
+                        
+                    file_1.write(txt)
+                    file_1.close()
+                    
+                    
+                
+                
+            
+            
+            
+        
+        
+        
+def create_folder(foldername):
+    if not os.path.exists(foldername):
+        print "Creando carpeta '%s' . . . " % foldername
+        os.mkdir(foldername)
     
 def repair_db(options,ddb=None,mode=0,odb=None):
     if (options.verbose):

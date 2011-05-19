@@ -32,7 +32,7 @@ except:
 try:
     from pydba_loadmodule import load_module
     from pydba_mtdparser import procesarOLAP, comprobarRelaciones
-    from pydba_repairdb import repair_db
+    from pydba_repairdb import repair_db, dump_db
     from pydba_createdb import create_db
     from pydba_execini import exec_ini
 except:
@@ -136,6 +136,9 @@ def main():
     g_action.add_option("-R","--repairdb", action="store_const", const="repair_db"
         ,dest="action", help="Execute tests to repair DB")
     
+    g_action.add_option("-D","--dump", action="store_const", const="dump_db"
+        ,dest="action", help="Dumps flfiles to disk")
+    
     g_action.add_option("--create","--createdb", action="store_const", const="create_db"
         ,dest="action", help="Create a new Database with basic fl* tables")
     
@@ -235,6 +238,8 @@ def main():
     elif (options.action=="check"):
         db=load_module(options, preparse = options.preparse)
         comprobarRelaciones()
+    elif (options.action=="dump_db"):
+        db=dump_db(options)
     elif (options.action=="repair_db"):
         db=repair_db(options)
     elif (options.action=="create_db"):
