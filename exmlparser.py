@@ -41,10 +41,9 @@ class XMLParser:
     
     def start_element(self,name, attrs):
         method_name=name.lower()
-        if (not method_name.isalpha()):
-            num_element+=1
-            method_name="element%d" % num_element
-        if (method_name in self.reserved_words):
+        if not method_name.isalpha():
+            method_name="_" +method_name
+        if method_name in self.reserved_words:
             method_name+="_"
             
         new=XMLParser_data()
