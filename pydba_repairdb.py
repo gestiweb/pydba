@@ -14,6 +14,18 @@ import pydba_loadpgsql
 #    *************************** REPAIR DATABASE *****
 #    
 import os, os.path
+# Modo "windows"
+ENCODING="cp1252"
+ENCODING_ERRORS="xmlcharrefreplace"
+# Modo "infosial/compatible"
+ENCODING="iso-8859-15"
+ENCODING_ERRORS="replace"
+
+def utf8decode(txt):
+    global ENCODING, ENCODING_ERRORS
+    utxt = unicode(txt,"UTF8")
+    txt= utxt.encode(ENCODING, ENCODING_ERRORS)
+    return txt
 
 
 def dump_db(options,odb=None):
@@ -64,10 +76,10 @@ def dump_db(options,odb=None):
             'L' : 'colaboracion',
         }
     folder_module = {
-        'flar2kut' : 'informesar',
+        'flar2kut' : 'ar2kut',
         'sys' : 'administracion',
-        'flcontacce' : 'contacceso',
-        'fl_a3_nomi' : 'nominasa3',
+        'flcontacce' : 'controlacceso',
+        'fl_a3_nomi' : 'nominas',
         'flcontppal' : 'principal',
         'flcontmode' : 'modelos',
         'flcontinfo' : 'informes',
@@ -133,9 +145,7 @@ def dump_db(options,odb=None):
         <description>%(module_descripcion)s</description>
 </MODULE>
                 """ % compuesto
-            utxt = unicode(txt,"UTF8")
-            txt= utxt.encode("cp1252", "xmlcharrefreplace")
-            file_mod.write( txt )
+            file_mod.write( utf8decode(txt) )
             file_mod.close()
             files_by_ext = {}
             for filekey, file1 in files.iteritems():
@@ -153,11 +163,8 @@ def dump_db(options,odb=None):
                 for fileobj in file_list:
                     file_1 = open(os.path.join(ext_folder,fileobj['nombre']),"w")
                     txt = fileobj['contenido']
-                    
-                    utxt = unicode(txt,"UTF8")
-                    txt= utxt.encode("cp1252", "xmlcharrefreplace")
                         
-                    file_1.write(txt)
+                    file_1.write( utf8decode(txt) )
                     file_1.close()
                     
                     
