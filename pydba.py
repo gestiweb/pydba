@@ -71,6 +71,7 @@ def main():
                         transactions = False,
                         files_loaded=[],
                         seqsync = None,
+                        pgsqlnodrop = False,
                         modules={}
                         )
     parser.add_option("--rebuildalone", help="Forbid rebuilds if other users are connected"
@@ -97,8 +98,11 @@ def main():
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
                         
-    parser.add_option("--safe", help="Enable safe mode. Disables table rebuild and psql load."
+    parser.add_option("--safe", help="Enable safe mode. Disables table rebuild and psql load/drop."
                         ,dest="safe", action="store_true")
+                        
+    parser.add_option("--pg-nodrop", help="Disables dropping psql objects before load."
+                        ,dest="pgsqlnodrop", action="store_true")
                         
     parser.add_option("-v", help="Be more verbose"
                         ,dest="verbose", action="store_true")

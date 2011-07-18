@@ -295,7 +295,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             odb.query("ROLLBACK;");
             raise
             
-       
+    tables_notrebuilt = []
     pydba_loadpgsql.process_drop(options,ddb)
     
 
@@ -400,12 +400,14 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             if xml:
                 if options.loadbaselec and not sql_update_metadata:
                     sql_update_metadata = "--"
-                    
-                if sql_update_metadata and (load_mtd(options,odb,ddb,tabla,xml) or not TablaCargada):
-                    if options.verbose:
-                        print "Actualizando metadata para %s" % tabla
-                    if sql_update_metadata != '--':
-                        ddb.query(sql_update_metadata)
+                if sql_update_metadata:    
+                    if load_mtd(options,odb,ddb,tabla,xml) or not TablaCargada:
+                        if options.verbose:
+                            print "Actualizando metadata para %s" % tabla
+                        if sql_update_metadata != '--':
+                            ddb.query(sql_update_metadata)
+                    else:
+                        tables_notrebuilt.append(modulo['nombre'])
                 
         if (len(sql)>1024):
             ddb.query(sql)
@@ -468,3 +470,6 @@ def repair_db(options,ddb=None,mode=0,odb=None):
     
     pydba_loadpgsql.process_create(options,ddb)
     if options.transactions: odb.query("COMMIT;");
+    if tables_notrebuilt:
+        print "Tables pending rebuild:", ", ".join(tables_notrebuilt)
+        
