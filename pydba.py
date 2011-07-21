@@ -72,9 +72,10 @@ def main():
                         files_loaded=[],
                         seqsync = None,
                         pgsqlnodrop = False,
+                        forgottables = False,
                         modules={}
                         )
-    parser.add_option("--rebuildalone", help="Forbid rebuilds if other users are connected"
+    parser.add_option("--onlyalone", help="Forbid rebuilds if other users are connected"
                         ,dest="rebuildalone", action="store_true")
                         
     parser.add_option("--reindex", help="Drop indexes and create them again whenever the MTD file is processed"
@@ -118,6 +119,9 @@ def main():
     
     parser.add_option("--rebuildtables", help="DROP and CREATE tables again"
                         ,dest="rebuildtables", action="store_true")
+    
+    parser.add_option("--forgottables", help="Update Metadata always and forgot what tables are pending a rebuild"
+                        ,dest="forgottables", action="store_true")
     
     g_action = optparse.OptionGroup(parser, "Actions","You MUST provide one of :")
     

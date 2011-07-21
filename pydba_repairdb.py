@@ -453,16 +453,19 @@ def repair_db(options,ddb=None,mode=0,odb=None):
                     sql_update_metadata=("INSERT INTO flmetadata (tabla,bloqueo,seq,xml)"
                         " VALUES('%s','f','0','%s');\n" % (tabla,sha1) )
             if xml:
-                if options.loadbaselec and not sql_update_metadata:
-                    sql_update_metadata = "--"
-                if sql_update_metadata or options.full:    
-                    if load_mtd(options,odb,ddb,tabla,xml) or not TablaCargada:
+                if sql_update_metadata or options.full or options.loadbaselec:    
+                    updatedTableStructure = load_mtd(options,odb,ddb,tabla,xml)
+                    if updatedTableStructure or not TablaCargada:
                         if options.verbose:
                             print "Actualizando metadata para %s" % tabla
-                        if sql_update_metadata and sql_update_metadata != '--':
+                        if sql_update_metadata:
                             ddb.query(sql_update_metadata)
                     elif sql_update_metadata:
-                        tables_notrebuilt.append(modulo['nombre'])
+                        if options.rebuildtables or options.forgottables:
+                            print "Actualizando metadatos para tabla %s" % tabla
+                            ddb.query(sql_update_metadata)
+                        else:
+                            tables_notrebuilt.append(modulo['nombre'])
                 
         if (len(sql)>1024):
             ddb.query(sql)

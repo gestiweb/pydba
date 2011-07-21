@@ -977,28 +977,29 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 ddb.query("DROP INDEX %s;" % fila['indice'])
         
             create_indexes(ddb,indexes, table)
-    
     if Regenerar:
         indexes = []
         qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
         dict_otable_count = qry_otable_count.dictresult()
         existent_rows = int(dict_otable_count[0]["n"])
-        if existent_rows < 1 :
-            Regenerar = False
-            try:
-                ddb.query("DROP TABLE %s CASCADE;" % (table))
-            except:
-                print "No se pudo borrar la tabla antigua." , table
-            try:
-                indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
-            except:
-                print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
-                why = traceback.format_exc()
-                print "**** Motivo:" , why
-            if not create_indexes(ddb,indexes, table): 
-                print "No se pudieron crear todos los indices."
+    else:
+        existent_rows = -1
         
-    if Regenerar:
+    if Regenerar and existent_rows < 1 :  # **** REGENERACION TABLA VACIA *** 
+        try:
+            ddb.query("DROP TABLE %s CASCADE;" % (table))
+        except:
+            print "No se pudo borrar la tabla antigua." , table
+        try:
+            indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
+        except:
+            print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
+            why = traceback.format_exc()
+            print "**** Motivo:" , why
+        if not create_indexes(ddb,indexes, table): 
+            print "No se pudieron crear todos los indices."
+                
+    elif Regenerar: # **** REGENERACION DE TABLA CON CONTENIDOS ****
         try:       
             print "Regenerando tabla %s (%d filas)" % (table,old_rows)
             data = None
