@@ -209,7 +209,7 @@ def main():
     
     if options.loadini: 
         exec_ini(options, options.loadini)
-     
+            
     if options.ddriver and not options.odriver: options.odriver=options.ddriver
     if options.dhost and not options.ohost: options.ohost=options.dhost
     if options.duser and not options.ouser: options.ouser=options.duser
@@ -220,6 +220,11 @@ def main():
         options.full = True
         #options.rebuildtables = True
         
+    if options.safe:
+        if options.rebuildtables:
+            print u"WARN: Se solicitó rebuildtables, pero safemode está activo."
+            options.rebuildtables = False
+            
     if ( options.action=="setup_olap" or 
         options.action=="check" or
         options.getdiskcopy or
