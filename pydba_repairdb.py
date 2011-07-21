@@ -4,7 +4,7 @@
 # Fichero de reparación de base de datos para PyDBa
 import pg             # depends - python-pygresql
 import _mysql     # depends - python-mysqldb
-import sys
+import sys, pprint
         
 from pydba_utils import *
 from pydba_mtdparser import load_mtd    
@@ -69,56 +69,80 @@ def dump_db(options,odb=None):
         key = file1["nombre"]
         files[key] = file1
     
-    folder_area = {
-            'sys' : 'sistema',
-            'C' : 'contabilidad',
-            'F' : 'facturacion',
-            'L' : 'colaboracion',
-        }
-    folder_module = {
-        'flar2kut' : 'ar2kut',
-        'sys' : 'administracion',
-        'flcontacce' : 'controlacceso',
-        'fl_a3_nomi' : 'nominas',
-        'flcontppal' : 'principal',
-        'flcontmode' : 'modelos',
-        'flcontinfo' : 'informes',
-        'flcolagedo' : 'gesdoc',
-        'flfactppal' : 'principal',
-        'flfactalma' : 'almacen',
-        'flfactteso' : 'tesoreria',
-        'flfactinfo' : 'informes',
-        'flfacturac' : 'facturacion',
-        
-        }
     folder_ext = {
-        '.kut' : "reports",
-        '.ar' : "reports",
-        '.mtd' : "tables",
-        '.qry' : "queries",
-        '.qs' : "scripts",
-        '.ts' : "translations",
-        '.ui' : "forms",
-        '.xml' : ".",
-        '.doc' : "docs",
-        '.csv' : "docs",
-        '.txt' : "docs",
-        '.odt' : "docs",
-        '.pgsql' : "pgsql",
-        '.sql' : "pgsql",
-        '.jrxml' : "ireports",
-        '.jasper' : "ireports",
-        
-        }
+        '.ar': 'reports',
+        '.csv': 'docs',
+        '.doc': 'docs',
+        '.jasper': 'ireports',
+        '.jrxml': 'ireports',
+        '.kut': 'reports',
+        '.mtd': 'tables',
+        '.odt': 'docs',
+        '.pgsql': 'pgsql',
+        '.qry': 'queries',
+        '.qs': 'scripts',
+        '.sql': 'pgsql',
+        '.ts': 'translations',
+        '.txt': 'docs',
+        '.ui': 'forms',
+        '.xml': '.'}
+
+    folder_area = {
+        'C': 'contabilidad',
+        'CRM': 'CRM',
+        'D': 'direccion',
+        'F': 'facturacion',
+        'L': 'colaboracion',
+        'R': 'rhumanos',
+        'sys': 'sistema'}
+
+    folder_module = {
+        'fl_a3_nomi': 'nominas',
+        'flar2kut': 'ar2kut',
+        'flcolagedo': 'gesdoc',
+        'flcolaproc': 'procesos',
+        'flcolaproy': 'proyectos',
+        'flcontacce': 'controlacceso',
+        'flcontinfo': 'informes',
+        'flcontmode': 'modelos',
+        'flcontppal': 'principal',
+        'flcrm_info': 'informes',
+        'flcrm_mark': 'marketing',
+        'flcrm_ppal': 'principal',
+        'fldatosppal': 'datos',
+        'fldireinne': 'analisis',
+        'flfactalma': 'almacen',
+        'flfactinfo': 'informes',
+        'flfactppal': 'principal',
+        'flfactteso': 'tesoreria',
+        'flfacturac': 'facturacion',
+        'flgraficos': 'graficos',
+        'flrrhhppal': 'principal',
+        'sys': 'administracion'}
+
+
     utf8_ext = [".ui", ".ts"]
-    
+    modified_vars = {}
     for areakey,area in areas.iteritems():
-        foldername = folder_area.get(areakey,areakey).lower()
+        foldername = folder_area.get(areakey,None)
+        if foldername is None:
+            foldername = raw_input("Area %s unknown,\n  which directory do you want? [%s]: " % (area['descripcion'],areakey.lower()))
+            if not foldername: foldername = areakey
+            folder_area[areakey] = foldername
+            modified_vars["folder_area"] = folder_area
+        foldername = foldername.lower()
         print "Area %s - %s (%s)... " % (areakey, area['descripcion'],foldername)
         create_folder(foldername)
         for modulekey, module in modules.iteritems():
             if module['idarea'] != areakey: continue
-            module_folder = os.path.join(foldername, folder_module.get(modulekey,modulekey).lower())
+            module_foldername = folder_module.get(modulekey,None)
+            if module_foldername is None:
+                module_foldername = raw_input("Module %s/%s unknown,\n  which directory do you want? [%s]: " % (areakey,module['descripcion'],modulekey.lower()))
+                if not module_foldername: module_foldername = modulekey
+                folder_module[modulekey] = module_foldername
+                modified_vars["folder_module"] = folder_module
+            module_foldername = module_foldername.lower()
+            module_folder = os.path.join(foldername, module_foldername)
             print "Module %s - %s (%s) ..." % (modulekey, module['descripcion'],module_folder)
             create_folder(module_folder)
             file_icono = open(os.path.join(module_folder,"%s.xpm" % modulekey),"w")
@@ -156,7 +180,19 @@ def dump_db(options,odb=None):
                 files_by_ext[ext].append(file1)
             
             for ext, file_list in sorted(files_by_ext.iteritems()):
-                ext_folder = os.path.join(module_folder,folder_ext.get(ext,"others"))
+                if len(ext) > 8: 
+                    print "Ignoring extension %s (more than 8 chars)" % ext
+                    continue
+                ext_foldername = folder_ext.get(ext,None) # default -> others
+                if ext_foldername is None:
+                    ext_foldername = raw_input("Extension %s unknown,\n  which directory do you want? [others]: " % (ext))
+                    if not ext_foldername: ext_foldername = "others"
+                    folder_ext[ext] = ext_foldername                
+                    modified_vars["folder_ext"] = folder_ext
+                sys.stdout.write("writting %s files: " % ext)
+                sys.stdout.flush()
+                ext_foldername = ext_foldername.lower()                
+                ext_folder = os.path.join(module_folder,ext_foldername)
                 #print "Extension %s (%s)" % (ext,ext_folder)
                 create_folder(ext_folder)
                 
@@ -166,8 +202,27 @@ def dump_db(options,odb=None):
                         
                     file_1.write( utf8decode(txt) )
                     file_1.close()
+                    sys.stdout.write(".")
+                    sys.stdout.flush()
+                sys.stdout.write("\n")
+                sys.stdout.flush()
                     
                     
+    print
+    export = options.debug or options.verbose
+    if modified_vars and not export:
+        doexport = raw_input("Some config vars (%s) were modified.\n  Do yo want to export them? ([Y]/n): " % (", ".join(modified_vars.keys())))
+        if doexport.lower() in ("y","s",""): export = True
+    if export:
+        if options.verbose:
+            modified_vars["folder_ext"] = folder_ext
+            modified_vars["folder_module"] = folder_module
+            modified_vars["folder_area"] = folder_area
+        print "Exporting variables:"
+        for varname, content in modified_vars.iteritems():
+            print "    %s = %s" % (varname, pprint.pformat(content, indent=8).strip().replace("{","{\n "))
+            print
+                
                 
                 
             
