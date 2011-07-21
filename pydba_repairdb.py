@@ -446,7 +446,7 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             sql_update_metadata = ""
             for txml in tablas:
                 TablaCargada=True
-                if txml['xml']!=sha1 or options.full:
+                if txml['xml']!=sha1:
                     sql_update_metadata="UPDATE flmetadata SET xml='%s' WHERE tabla='%s';\n" % (sha1,tabla)
             if not TablaCargada:
                     print "Cargando tabla nueva %s ..." % tabla
@@ -455,13 +455,13 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             if xml:
                 if options.loadbaselec and not sql_update_metadata:
                     sql_update_metadata = "--"
-                if sql_update_metadata:    
+                if sql_update_metadata or options.full:    
                     if load_mtd(options,odb,ddb,tabla,xml) or not TablaCargada:
                         if options.verbose:
                             print "Actualizando metadata para %s" % tabla
-                        if sql_update_metadata != '--':
+                        if sql_update_metadata and sql_update_metadata != '--':
                             ddb.query(sql_update_metadata)
-                    else:
+                    elif sql_update_metadata:
                         tables_notrebuilt.append(modulo['nombre'])
                 
         if (len(sql)>1024):
