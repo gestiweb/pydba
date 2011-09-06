@@ -1393,6 +1393,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         csv=open(options.loadbaselec,"r")
 
         csvfields=csv.readline().split("\t")
+        required_fields = [
+              "referenciabaselec",
+              "referenciafabricante",
+              "modelofabricante",
+              "pvpactual",
+              ]
+        validfields = 0
         for n,field in enumerate(csvfields):
             field = field.replace(" ","")
             field = field.lower()
@@ -1400,10 +1407,25 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             field = re.sub(r'[^a-z0-9]','',field)
             if field in mparser.field:
               csvfields[n]=field
+              validfields += 1
             else:
               csvfields[n]="* " + field
             
+        if validfields == 0:
+            print "@ ERROR: No se encontraron campos validos en el CSV!"
+            raise ValueError,"@ ERROR: No se encontraron campos validos en el CSV!"
             
+        if validfields < len(required_fields):
+            print "@ ERROR: No se encontraron suficientes campos validos en el CSV! (Se encontraron %d de %d campos requeridos)" % (len(validfields), len(required_fields))
+            raise ValueError,"@ ERROR: No se encontraron suficientes campos validos en el CSV!"
+        
+        for reqfield in required_fields:
+            if reqfield not in csvfields:
+                print "@ ERROR: El campo %s no existe en el CSV. No se puede importar" % reqfield
+                raise ValueError, "@ ERROR: El campo %s no existe en el CSV. No se puede importar" % reqfield
+        
+        
+        
         data = []
         to1 = 0
 
