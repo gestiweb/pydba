@@ -50,6 +50,7 @@ class MTDParser:
         'bool'      : 'bool',
         'date'      : 'date',
         'time'      : 'time',
+        'bytearray'      : 'bytea',
     }
     nonbasic_types= [ 'pixmap' ]
     
@@ -289,6 +290,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
         'stringlist': 'text',
         'pixmap'    : 'text',
         'unlock'    : 'boolean',
+        'bytearray' : 'bytea',
     }
     constraints=[]
     indexes=[]
