@@ -264,8 +264,8 @@ def load_module_loadone(options,modpath,db, preparse=False):
     cargado=False
     for pmodulo in tmodulo:
         cargado=True
-        if pmodulo['bloqueo']=='t':    # TRUE Es que NO está bloqueado. Está al revés.s
-            habilitar_carga=True
+        # if pmodulo['bloqueo']=='t':    # TRUE Es que NO está bloqueado. Está al revés.s
+        habilitar_carga=True
     
     if not cargado:
         print "Se procede a crear el módulo nuevo %s" % module
