@@ -289,7 +289,7 @@ def filename(pgname):
 
 def process_drop(options, db):
     global pgobjects,dependency_order
-    if options.safe or options.pgsqlnodrop: # enable drop only in full mode
+    if options.safe or options.pgsqlnodrop or options.nopg: # enable drop only in full mode
         return False
     for name in reversed(dependency_order):
         #print "Borrando objeto", name
@@ -312,7 +312,7 @@ def process_drop(options, db):
         
 def process_create(options,db):
     global pgobjects,dependency_order
-    if options.safe: # disable create/replace in safe-mode. 
+    if options.safe or options.nopg: # disable create/replace in safe-mode. 
         return False
     try:
         db.query("CREATE LANGUAGE plpgsql;")

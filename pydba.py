@@ -66,13 +66,15 @@ def main():
                         flscriptparser=False,
                         addchecks=False,
                         preparse = False,
-                        rebuildalone  = False,
+                        rebuildalone = False,
                         reindex = False,
                         transactions = False,
                         files_loaded=[],
                         seqsync = None,
                         pgsqlnodrop = False,
                         forgottables = False,
+                        cleanfiles = False,
+                        nopg = False,
                         modules={}
                         )
     parser.add_option("--onlyalone", help="Forbid rebuilds if other users are connected"
@@ -95,6 +97,9 @@ def main():
                         
     parser.add_option("--transactional", help="Use transactions inside PyDBA"
                         ,dest="transactions", action="store_true")
+
+    parser.add_option("--cleanfiles", help="Purge old data on flfiles table"
+                        ,dest="cleanfiles", action="store_true")
                         
     parser.add_option("--debug", help="Tons of debug output"
                         ,dest="debug", action="store_true")
@@ -104,6 +109,9 @@ def main():
                         
     parser.add_option("--pg-nodrop", help="Disables dropping psql objects before load."
                         ,dest="pgsqlnodrop", action="store_true")
+                        
+    parser.add_option("--nopg", help="Disables creation/deletion of objects"
+                        ,dest="nopg", action="store_true")
                         
     parser.add_option("-v", help="Be more verbose"
                         ,dest="verbose", action="store_true")

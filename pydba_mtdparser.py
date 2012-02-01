@@ -946,8 +946,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             AND pc.relname = '%s'
                 """ % table)
         dt_indexes=qry_indexes.dictresult() 
-        indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = options.addchecks, issue_create = False)
-        if not reindex:
+        indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = False, issue_create = False)
+        if reindex:
             i_names = []
             i_names2 = [ r['indice'] for r in dt_indexes ] 
 

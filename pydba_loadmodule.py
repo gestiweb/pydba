@@ -93,11 +93,17 @@ def load_module(options,db=None, preparse=False):
     for module in modules:
         load_module_loadone(options,module,db,preparse)
     
-    sql="DELETE FROM flfiles WHERE sha NOT IN ('%s');\n" % "', '".join(options.sha_allowed_files)
-    db.query(sql)
-    
-    sql="DELETE FROM flfiles WHERE nombre NOT IN ('%s');\n" % "', '".join(options.filenames_allowed_files)
-    db.query(sql)
+    if options.cleanfiles:
+        sql="DELETE FROM flfiles WHERE idmodulo != 'sys' AND sha NOT IN ('%s') AND nombre NOT IN ('%s');\n" % ("', '".join(options.sha_allowed_files),"', '".join(options.filenames_allowed_files))
+        db.query(sql)
+    else:
+        sql="SELECT nombre FROM flfiles WHERE idmodulo != 'sys' AND sha NOT IN ('%s') AND nombre NOT IN ('%s');\n" % ("', '".join(options.sha_allowed_files),"', '".join(options.filenames_allowed_files))
+        lista_ficheros = [ row['nombre'] for row in db.query(sql).dictresult() ]
+        if lista_ficheros:
+            print "Hay %d ficheros cargados que ya no están en el proyecto. Ejecute --cleanfiles para limpiarlos." % (len(lista_ficheros))
+            print "Ficheros:", ",".join(lista_ficheros[:32])
+            
+            
     
     if (not options.quiet):
         print "* done"
