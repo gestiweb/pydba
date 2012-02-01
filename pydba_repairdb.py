@@ -524,13 +524,20 @@ def repair_db(options,ddb=None,mode=0,odb=None):
         qry_dmodulos=ddb.query("SELECT idmodulo, descripcion FROM flmodules WHERE bloqueo = TRUE AND idmodulo NOT IN ('" + "', '".join(modules_installed) + "')");
         for idmodulo, descripcion in qry_dmodulos.getresult():
             modules_to_uninstall.add((idmodulo, descripcion))
-        
+    
     if modules_to_uninstall:
-        print "INFO: Los siguientes modulos ya no se usan y serán desinstalados:"
-        for idmodulo, nombre in modules_to_uninstall:
-            print " - %s : %s " % (idmodulo, nombre)
-            ddb.query("DELETE FROM flmodules WHERE idmodulo = '%s'" % idmodulo);
-        print ":: Finalizado."
+        if options.cleanfiles:
+            print "INFO: Los siguientes modulos ya no se usan y serán desinstalados:"
+            for idmodulo, nombre in modules_to_uninstall:
+                print " - %s : %s " % (idmodulo, nombre)
+                ddb.query("DELETE FROM flmodules WHERE idmodulo = '%s'" % idmodulo);
+            print ":: Finalizado."
+        else:
+            print "Existen %d modulos pendientes de desinstalar:" % (len(modules_to_uninstall)),
+            for idmodulo, nombre in modules_to_uninstall:
+                print idmodulo, 
+            print
+            print "Use --cleanfiles para desinstalarlos"
     # !---- Verificacion de areas instaladas
     qry_dmodulos=ddb.query("SELECT DISTINCT idarea FROM flmodules");
     areas_installed = set([])
@@ -545,12 +552,19 @@ def repair_db(options,ddb=None,mode=0,odb=None):
             areas_to_uninstall.add((idarea, descripcion))
     
     if areas_to_uninstall:
-        print "INFO: Las siguientes areas ya no se usan y serán desinstaladas:"
-        for idarea, nombre in areas_to_uninstall:
-            print " - %s : %s " % (idarea, nombre)
-            ddb.query("DELETE FROM flareas WHERE idarea = '%s'" % idarea);
-        print ":: Finalizado."
-    
+        if options.cleanfiles:
+            print "INFO: Las siguientes areas ya no se usan y serán desinstaladas:"
+            for idarea, nombre in areas_to_uninstall:
+                print " - %s : %s " % (idarea, nombre)
+                ddb.query("DELETE FROM flareas WHERE idarea = '%s'" % idarea);
+            print ":: Finalizado."
+        else:
+            print "Existen %d areas pendientes de desinstalar:" % (len(areas_to_uninstall)),
+            for idarea, nombre in areas_to_uninstall:
+                print idarea, 
+            print
+            print "Use --cleanfiles para desinstalarlos"
+            
     qry_serial=ddb.query("SELECT sha FROM flserial");
     serials=qry_serial.dictresult() 
     for serial in serials:
