@@ -116,6 +116,7 @@ def dump_db(options,odb=None):
         'flfactppal': 'principal',
         'flfactteso': 'tesoreria',
         'flfacturac': 'facturacion',
+        'flfacttpv': 'tpv',
         'flgraficos': 'graficos',
         'flrrhhppal': 'principal',
         'sys': 'administracion'}

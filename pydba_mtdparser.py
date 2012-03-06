@@ -809,6 +809,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             if null=="NO": null=False
             if not mfield.null:
                 old_fields.append("COALESCE(%s,%s)" % (name,default_value))
+            elif mfield.dtype == "character varying":
+                old_fields.append("%s::varchar(%d)" % (name,mfield.length))
             else:
                 old_fields.append(name)
             dtype=origin_fielddata[name]["data_type"]
