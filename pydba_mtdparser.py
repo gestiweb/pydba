@@ -807,12 +807,12 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             null=origin_fielddata[name]["is_nullable"]
             if null=="YES": null=True
             if null=="NO": null=False
+            fname = name
             if not mfield.null:
-                old_fields.append("COALESCE(%s,%s)" % (name,default_value))
-            elif mfield.dtype == "character varying":
-                old_fields.append("%s::varchar(%d)" % (name,mfield.length))
-            else:
-                old_fields.append(name)
+                fname = "COALESCE(%s,%s)" % (fname,default_value)
+            if mfield.dtype == "character varying":
+                fname = "%s::varchar(%d)" % (fname,mfield.length)
+            old_fields.append(fname)
             dtype=origin_fielddata[name]["data_type"]
             mfielddtype = mfield.dtype
             length=origin_fielddata[name]["character_maximum_length"]
