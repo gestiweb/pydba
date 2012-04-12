@@ -69,7 +69,7 @@ def flscriptparser(root=None,name=None,launch=False):
         flscriptparser_filelist.append(filename)
     
     if launch and len(flscriptparser_filelist)>0:
-        os.execvp("flscriptparser",["flscriptparser"]+flscriptparser_filelist)
+        os.execvp("flscriptparser2",["flscriptparser2"]+flscriptparser_filelist)
         flscriptparser_filelist=[]
 
 def sha_hexdigest(text):
