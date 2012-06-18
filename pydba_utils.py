@@ -23,6 +23,34 @@ def f_ext(filename):
     numsplits=len(name_s)
     return name_s[numsplits-1]
 
+def my_escape_string(text):
+    text=str(text)
+    transorder = [
+        "\\",
+        "\b","\f","\r","\t","\v","\n",
+        "\0","'","\""
+        
+        ]
+    transstr={
+        "\\": "\\\\",
+        "\b": "\\b",
+        "\f": "\\f",
+        "\n": "\\n",
+        "\r": "\\r",
+        "\t": "\\t",
+        "\v": "\\v",
+        "\0" : "\\0",
+        "'" : "\\'",
+        "\"" : "\\\"",
+        }
+
+    for key in transorder:
+        val = transstr[key]
+        text=text.replace(key,val)
+    
+    return text
+    
+
 def copy_escapechars(text):
     if text is None: return "\\N"
     if text is True: return "t"

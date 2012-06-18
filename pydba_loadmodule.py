@@ -14,6 +14,8 @@ from pydba_utils import *
 
 import pydba_loadpgsql 
 
+
+
 #    *************************** LOAD MODULE *****
 #    
     
@@ -166,7 +168,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
                 contents_1=""
                 if f_ext(name) in filetypes:
                     contents_1=loadfile_inutf8(root,name)
-                    contents=pg.escape_string(contents_1)
+                    contents=my_escape_string(contents_1)
                     if not loadFile:
                         try:
                             if pd[fname]["sha"] is None: loadFile = True # Some bug in database can cause sha is None.
@@ -323,7 +325,13 @@ def load_module_loadone(options,modpath,db, preparse=False):
             
             sql=("INSERT INTO flfiles (contenido, bloqueo, sha, idmodulo, nombre) "    
                     "VALUES(E'%(contents)s', 't', '%(sha)s','%(module)s', '%(name)s')" % file)
-            db.query(sql)
+            try:
+                db.query(sql)
+            except Exception, e:
+                print e.__class__.__name__, e
+                print sql
+                
+                raise
     
     
     
