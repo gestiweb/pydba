@@ -5,6 +5,7 @@
 import traceback
 from base64 import b64decode, b64encode
 import zlib
+import subprocess
 import optparse
 import os, sys 		# variables entorno
 
@@ -139,6 +140,9 @@ def main():
     
     g_action.add_option("-l","--lmod", action="store_const", const="load_module"
         ,dest="action", help="load modules")
+
+    g_action.add_option("-r","--run", action="store_const", const="run_module"
+        ,dest="action", help="load modules and run Eneboo")
         
     g_action.add_option("-O","--olap", action="store_const", const="setup_olap"
         ,dest="action", help="setup olap tables (obsolete, use -Y)")
@@ -146,7 +150,7 @@ def main():
     g_action.add_option("-Y","--export-yaml", action="store_const", const="setup_olap"
         ,dest="action", help="export metadata as Yaml")
         
-    g_action.add_option("-r","--reload-mtd", action="store_const", const="reload_mtd"
+    g_action.add_option("-m","--reload-mtd", action="store_const", const="reload_mtd"
         ,dest="action", help="Parses MTD files on DB and complete tables")
                 
     g_action.add_option("-R","--repairdb", action="store_const", const="repair_db"
@@ -244,6 +248,20 @@ def main():
     if (options.action=="none"):
         print "You must provide at least one action"
     
+    elif (options.action=="run_module"):
+        db=load_module(options, preparse = options.preparse)
+        repair_db(options,db)
+        try:
+            subprocess.call(["eneboo", "-silentconn",
+                    ":".join([
+                        options.ddb, options.duser, 
+                        "PostgreSQL", options.dhost, options.dport, 
+                        options.dpasswd
+                        ])
+                    ])
+        except KeyboardInterrupt,e:
+            print "<KeyboardInterrupt>"
+          
     elif (options.action=="load_module"):
         db=load_module(options, preparse = options.preparse)
         repair_db(options,db)
