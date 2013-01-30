@@ -416,8 +416,9 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             unique_index = "  "
             
         if hasattr(field,"index"):
-            if str(field.index) in ["true","fastwrite"]:
+            if str(field.index) in ["true","fastwrite","notnull"]:
                 if str(field.index) == 'fastwrite': index_options.append('fastwrite')
+                if str(field.index) == 'notnull': index_options.append('notnull')
                 this_field_requires_index = True
             elif str(field.index)=="false":
                 this_field_requires_index = False
@@ -432,7 +433,9 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             concurrent = ""
             options_with = ""
             if 'fastwrite' in index_options:
-                options_with = "WITH (fillfactor = 60)"
+                options_with += " WITH (fillfactor = 60) "
+            if 'notnull' in index_options:
+                options_with += " WHERE %s IS NOT NULL " % row['name']
                 # concurrent = "CONCURRENTLY"
             indexes+=["CREATE %s INDEX %s %s_%s_m1_idx ON %s (%s) %s;" 
                     % (unique_index,concurrent,table,row['name'],table,row['name'], options_with)]
