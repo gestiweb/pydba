@@ -34,7 +34,7 @@ try:
     from pydba_loadmodule import load_module
     from pydba_mtdparser import procesarOLAP, comprobarRelaciones
     from pydba_repairdb import repair_db, dump_db
-    from pydba_createdb import create_db
+    from pydba_createdb import create_db, create_sql
     from pydba_execini import exec_ini
 except:
     start_errors += 1
@@ -140,6 +140,9 @@ def main():
     
     g_action.add_option("-l","--lmod", action="store_const", const="load_module"
         ,dest="action", help="load modules")
+
+    g_action.add_option("-L","--Lmod", action="store_const", const="load_module_sql"
+        ,dest="action", help="load create SQL and modules")
 
     g_action.add_option("-r","--run", action="store_const", const="run_module"
         ,dest="action", help="load modules and run Eneboo")
@@ -264,6 +267,10 @@ def main():
           
     elif (options.action=="load_module"):
         db=load_module(options, preparse = options.preparse)
+        repair_db(options,db)
+    elif (options.action=="load_module_sql"):
+        db=create_sql(options)
+        load_module(options, db, preparse = options.preparse)
         repair_db(options,db)
     elif (options.action=="setup_olap"):
         db=load_module(options, preparse = options.preparse)

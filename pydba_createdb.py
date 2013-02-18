@@ -37,6 +37,9 @@ def create_db(options):
     except:
         print "Fallo al crear la base de datos %s. Se asume que ya está creada y se continúa." % ddb
     db.close
+    return create_sql(options)
+    
+def create_sql(options):
     db=dbconnect(options)
     createsql = open_createSQL()
     createsql_s  = createsql.split("\n\n--\n")
