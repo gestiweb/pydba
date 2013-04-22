@@ -6,7 +6,7 @@
 import pg       # depends - python-pygresql
 import _mysql   # depends - python-mysqldb
 import os       # permite la función os.join
-import getpass
+import getpass, subprocess
 typeSHALib = None
 try:
     import hashlib
@@ -97,7 +97,9 @@ def flscriptparser(root=None,name=None,launch=False):
         flscriptparser_filelist.append(filename)
     
     if launch and len(flscriptparser_filelist)>0:
-        os.execvp("flscriptparser2",["flscriptparser2"]+flscriptparser_filelist)
+        # os.execvp("flscriptparser2",["flscriptparser2"]+flscriptparser_filelist)
+        subprocess.call(["flscriptparser2"]+flscriptparser_filelist)
+        print
         flscriptparser_filelist=[]
 
 def sha_hexdigest(text):
