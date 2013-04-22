@@ -76,6 +76,7 @@ def main():
                         forgottables = False,
                         cleanfiles = False,
                         nopg = False,
+                        updatemodules = False,
                         modules={}
                         )
     parser.add_option("--onlyalone", help="Forbid rebuilds if other users are connected"
@@ -131,6 +132,9 @@ def main():
     
     parser.add_option("--forgottables", help="Update Metadata always and forgot what tables are pending a rebuild"
                         ,dest="forgottables", action="store_true")
+                        
+    parser.add_option("--updatemodules", help="Update Modules doing a DELETE - INSERT"
+                        ,dest="updatemodules", action="store_true")
     
     g_action = optparse.OptionGroup(parser, "Actions","You MUST provide one of :")
     

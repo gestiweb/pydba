@@ -274,7 +274,13 @@ def load_module_loadone(options,modpath,db, preparse=False):
         cargado=True
         # if pmodulo['bloqueo']=='t':    # TRUE Es que NO está bloqueado. Está al revés.s
         habilitar_carga=True
-    
+    if cargado and options.updatemodules:
+        cargado = False
+        idmodulo        = pg.escape_string(d_module['name']) 
+        sql=("DELETE FROM flmodules WHERE idmodulo = '%s'"  % 
+                            (idmodulo))
+        db.query(sql)     
+        
     if not cargado:
         print "Se procede a crear el módulo nuevo %s" % module
         
