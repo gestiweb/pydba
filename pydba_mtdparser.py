@@ -297,6 +297,19 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
     drops=[]
     ck = [] 
     fieldnames = []
+    
+    table_options = str(getattr(mtd, "options", "")).split(",")
+    default_idx_options = []
+
+    if 'fastwrite' in table_options: 
+        default_idx_options.append("fastwrite")
+        
+    if 'noindex' in table_options: 
+        default_idx_options.append("disabled")
+    
+    if 'only-indexable' in table_options: 
+        default_idx_options.append("only-indexable")
+    
     pkeyname = "%s_pkey" % table
     for field in mtd.field:
         if str(field.name).lower() in fieldnames:
@@ -419,24 +432,43 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             if str(field.index) in ["true","fastwrite","notnull"]:
                 if str(field.index) == 'fastwrite': index_options.append('fastwrite')
                 if str(field.index) == 'notnull': index_options.append('notnull')
+                if str(field.index) == 'only-indexable': index_options.append('only-indexable')
+                if str(field.index) == 'disabled': index_options.append('disabled')
                 this_field_requires_index = True
             elif str(field.index)=="false":
                 this_field_requires_index = False
             else:
                 print("WARNING: %s.%s unknown 'index' value: %s" % (table,row['name'],str(field.index)))
+        else:
+            index_options += default_idx_options
+            
+        # El indice de PK es innecesario, la base de datos crea otro para mantener el constraint.
+        if ispkey: index_options += 'disabled' 
         
             
         if this_field_requires_index:
-            if row['type'].startswith("character varying") and 'fastwrite' not in index_options:
-                indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text) %s);" 
-                        % (table,row['name'],table,row['name'], index_adds)]
             concurrent = ""
             options_with = ""
+            where_list = []
             if 'fastwrite' in index_options:
                 options_with += " WITH (fillfactor = 60) "
             if 'notnull' in index_options:
-                options_with += " WHERE %s IS NOT NULL " % row['name']
+                where_list += ["%s IS NOT NULL" % row['name']]
+            if 'only-indexable' in index_options:
+                where_list += ["indexable = TRUE"]
+            if 'disabled' in index_options:
+                where_list = ["false"]
+                
+            if where_list:
+                options_with += " WHERE %s " % (" AND ".join(where_list))
                 # concurrent = "CONCURRENTLY"
+            if row['type'].startswith("character varying"):
+                options_with1 =  options_with
+                if 'fastwrite' in index_options or 'disabled' in default_idx_options:
+                    options_with1 = " WHERE false "
+                indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text) %s) %s;" 
+                        % (table,row['name'],table,row['name'], index_adds, options_with1)]
+
             indexes+=["CREATE %s INDEX %s %s_%s_m1_idx ON %s (%s) %s;" 
                     % (unique_index,concurrent,table,row['name'],table,row['name'], options_with)]
                     
@@ -580,9 +612,15 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
                 #print "ERROR:", drop , " .. execution failed:"
                 #traceback.print_exc(file=sys.stdout)
                 #print "-------"
-            
+    table_fillfactor = 90
+    pkey_fillfactor = 80
+    
+    if 'fastwrite' in table_options:
+        table_fillfactor = 65
+        pkey_fillfactor = 65
+    
     txtfields+=constraints
-    txtcreate="CREATE TABLE %s (%s) WITH (fillfactor = 90,  OIDS=FALSE) ;" % (table, ",\n".join(txtfields))
+    txtcreate="CREATE TABLE %s (%s) WITH (fillfactor = %d,  OIDS=FALSE) ;" % (table, ",\n".join(txtfields), table_fillfactor)
     
     if issue_create:
         try:
@@ -590,7 +628,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
         except Exception, e:
             print e, txtcreate
             raise     
-        sql = "ALTER INDEX %s SET (fillfactor = 80);" % (pkeyname)
+        sql = "ALTER INDEX %s SET (fillfactor = %d);" % (pkeyname, pkey_fillfactor)
         try:
             db.query(sql)
         except Exception, e:
@@ -650,8 +688,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if str(mtdquery)!=table:
             print "ERROR: Expected '%s' in MTD QUERY name but '%s' found ***" % (table,str(mtdquery))
         # Probablemente se puede ignorar las cargas de estas queries. No son tablas en realidad.    
-        if str(mtd.name)==table:
-            print "ERROR: MTD Query Filename '%s' HAS BEEN FOUND in the <name> attribute: '%s' ***" % (table,str(mtd.name))
+        # if str(mtd.name)==table:
+        #    print "ERROR: MTD Query Filename '%s' HAS BEEN FOUND in the <name> attribute: '%s' ***" % (table,str(mtd.name))
         return False
     else:
         if str(mtd.name)!=table:
@@ -981,7 +1019,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if reindex:
             print "Reindexing table %s . . . (full reindex)" % table
             for fila in dt_indexes:
-                ddb.query("DROP INDEX %s;" % fila['indice'])
+                try:
+                    ddb.query("DROP INDEX %s;" % fila['indice'])
+                except Exception:
+                    pass
         
             create_indexes(ddb,indexes, table)
     if Regenerar:
@@ -1022,7 +1063,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 """ % table)
                 dt_indexes=qry_indexes.dictresult() 
                 for fila in dt_indexes:
-                    ddb.query("DROP INDEX %s;" % fila['indice'])
+                    try:
+                        ddb.query("DROP INDEX %s;" % fila['indice'])
+                    except Exception:
+                        pass
         
             now = datetime.datetime.now()
             nseed = random.randint(0,255)
