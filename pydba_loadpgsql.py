@@ -297,12 +297,17 @@ def process_drop(options, db):
         try:
             db.query(obj.drop)
         except pg.ProgrammingError, e:
-            if e.args[0].startswith("ERROR:  no existe"):
+            no_existe = False
+            if e.args[0].startswith("ERROR:  no existe"): no_existe = True
+            elif e.args[0].startswith("ERROR: "):
+                if re.search(r"does not exist", e.args[0]): no_existe = True
+            if no_existe:
                 debug = False
                 if options.verbose:
                     print "INFO: objeto '%s' aun no existe: " % name, e.args[0].strip()
             else:
                 print "ERROR: Error borrando objeto '%s':" % name, filename(name)
+                print "DB-ERROR:", e.args[0].strip()
                 debug = True
             if debug:
                 print e.args[0].strip()
