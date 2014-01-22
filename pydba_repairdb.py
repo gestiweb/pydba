@@ -127,7 +127,8 @@ def dump_db(options,odb=None):
     for areakey,area in areas.iteritems():
         foldername = folder_area.get(areakey,None)
         if foldername is None:
-            foldername = raw_input("Area %s unknown,\n  which directory do you want? [%s]: " % (area['descripcion'],areakey.lower()))
+            print "Area key %r not found in %r." % (areakey,folder_area.keys()) 
+            foldername = raw_input("Area %r unknown,\n  which directory do you want? [%s]: " % (area['descripcion'],areakey.lower()))
             if not foldername: foldername = areakey
             folder_area[areakey] = foldername
             modified_vars["folder_area"] = folder_area

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 #   encoding: UTF8
 
+import gc
 import traceback
 from base64 import b64decode, b64encode
 import zlib
@@ -316,7 +317,10 @@ def main():
         db.query("SET client_min_messages = error;");            
         f1 = open(options.getdiskcopy)
         mode = 0 # 0 - espera tabla; 1 - configurando; 2 - volcando datos
+        buffers = []
+        line = None
         while True:
+            del line
             line = f1.readline()
             if not line: break
             if mode == 0:
@@ -326,7 +330,7 @@ def main():
                 table = ""
                 fields = []
                 primarykey = ""
-                buffers = []
+                del buffers[:]
                 
             elif mode == 1:
                 if line[:3] == '-- ':
@@ -408,7 +412,7 @@ def main():
                     else:
                         sys.stdout.write("\r%s .. empty" % (msg))
                         sys.stdout.flush()
-                        
+                    gc.collect()
                     sys.stdout.write("\r%s .. COMMIT                  " % (msg))
                     sys.stdout.flush()
                     try:
@@ -419,7 +423,7 @@ def main():
                         print sql
                         print traceback.format_exc()
                         raise
-                        
+                    """    
                     sys.stdout.write("\r%s .. VACUUM                  " % (msg))
                     sys.stdout.flush()
                     try:
@@ -442,7 +446,7 @@ def main():
                         print sql
                         print traceback.format_exc()
                         raise
-                        
+                    """ 
                         
                     if rows > 0:
                         sys.stdout.write("\r%s %d registros (%.2f%%).              " % (msg,nlineas,float(nlineas*100.0)/rows))
@@ -458,8 +462,8 @@ def main():
                     table = ""
                     fields = []
                     primarykey = ""
-                        
-                    buffers = []
+                    del buffers[:]    
+                    #buffers = []
                     
                 if line == '-- bindata >>\n':
                     if len(buffers)> 0 and len(buffers) != len(fields):
@@ -469,7 +473,7 @@ def main():
                     else:
                         sys.stdout.write("\r%s %d registros.           PRELOAD     " % (msg,nlineas))
                     sys.stdout.flush()
-                    buffers = []
+                    del buffers[:]
                     continue
                 if line[:2] == '--': continue
                 if len(buffers)<len(fields):
@@ -478,38 +482,45 @@ def main():
                     else:
                         sys.stdout.write("\r%s %d registros.           PROCESS    " % (msg,nlineas))
                     sys.stdout.flush()
-                    buf = zlib.decompress(b64decode(line[:-1]))
-                    mfields = buf.split("\t")
-                    buffers.append(mfields)
-                    if len(buffers) == len(fields):
-                        if nlineas == 0:
-                            
-                            try:
-                                sql = "COPY \"%s\" (%s) FROM STDIN;" % (table, ", ".join(fields))
-                                db.query(sql);
-                            except:
-                                print "Error en la sql:"
-                                print sql
-                                print traceback.format_exc()
-                                raise
-
-                        # ROTAR FILAS
-                        lrows = []
-                        for n in buffers[0]: lrows.append([])
-                        for n,buffer1 in enumerate(buffers):
-                            for row,val in zip(lrows,buffer1):
-                                row.append(val)
-                            
-                        if rows > 0:
-                            sys.stdout.write("\r%s %d registros (%.2f%%).  UPLOADING   " % (msg,nlineas,float(nlineas*100.0)/rows))
-                        else:
-                            sys.stdout.write("\r%s %d registros.           UPLOADING   " % (msg,nlineas))
-                        sys.stdout.flush()
+                    def addbuffer(line, buffers):
+                        buf = zlib.decompress(b64decode(line[:-1]))
+                        mfields = buf.split("\t")
+                        buffers.append(mfields)
+                    addbuffer(line, buffers)
+                    gc.collect()
+                    
+                def copytodb(buffers, db, nlineas):
+                    # ROTAR FILAS
+                    lrows = []
+                    for n in buffers[0]: lrows.append([])
+                    for n,buffer1 in enumerate(buffers):
+                        for row,val in zip(lrows,buffer1):
+                            row.append(val)
                         
-                        for row in lrows:
-                            db.putline("\t".join(row)+"\n")
-                            nlineas+=1
-                        del lrows
+                    if rows > 0:
+                        sys.stdout.write("\r%s %d registros (%.2f%%).  UPLOADING   " % (msg,nlineas,float(nlineas*100.0)/rows))
+                    else:
+                        sys.stdout.write("\r%s %d registros.           UPLOADING   " % (msg,nlineas))
+                    sys.stdout.flush()
+                    n = len(lrows)
+                    for row in lrows:
+                        db.putline("\t".join(row)+"\n")
+                        nlineas+=1
+                    del lrows
+                    return n
+                    
+                if len(buffers) == len(fields):
+                    if nlineas == 0:
+                        try:
+                            sql = "COPY \"%s\" (%s) FROM STDIN;" % (table, ", ".join(fields))
+                            db.query(sql);
+                        except:
+                            print "Error en la sql:"
+                            print sql
+                            print traceback.format_exc()
+                            raise
+                    nlineas += copytodb(buffers, db, nlineas)
+                
                         
                             
                     """

@@ -853,6 +853,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 fname = "COALESCE(%s,%s)" % (fname,default_value)
             if mfield.dtype == "character varying":
                 fname = "%s::varchar(%d)" % (fname,mfield.length)
+            if mfield.dtype in  ["serial","integer","smallint", "int", "tinyint", "bigint"]:
+                fname = "%s::integer" % (fname)
             old_fields.append(fname)
             dtype=origin_fielddata[name]["data_type"]
             mfielddtype = mfield.dtype
@@ -1289,6 +1291,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 
         if num > 0:
             print "Volcando tabla %s (%d)\t>> %s" % (table, num, filename)
+        
     
         """
         f1 = open("/tmp/psqldiskcopy/%s.restore.sql" % table, "w")
@@ -1310,12 +1313,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         #f1.write("--*TRUNCATE %s;\n" % (table))
         #f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
         f1.write("--BEGIN-COPY--\n")
-        try:
-            sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
-            qry = ddb.query(sql)
-        except:
-            sql = "COPY %s (%s) TO STDOUT" % (table, fields)
-            qry = ddb.query(sql)
+        sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
+        qry = ddb.query(sql)
             
         buffers = []
         softlimit = 16033  # TIENE QUE SER PRIMO!! 
@@ -1418,7 +1417,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 #f1.write(line+"\n");
                 
                 if line == "\\.": break
-            ddb.endcopy()
+            try:
+                ddb.endcopy()
+            except IOError: 
+                pass
         except:
             print "Un error ocurrió durante la copia (%d/%d lineas fueron copiadas):" % (n,num)
             print traceback.format_exc()
