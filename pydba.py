@@ -86,6 +86,9 @@ def main():
     parser.add_option("--reindex", help="Drop indexes and create them again whenever the MTD file is processed"
                         ,dest="reindex", action="store_true")
                         
+    parser.add_option("--loindex", help="Disables most indexes used by Eneboo to enhance write speed"
+                        ,dest="loindex", action="store_true")
+                        
     parser.add_option("--diskcopy", help="Create a backup .pydbabackup"
                         ,dest="diskcopy", action="store_true")
                         

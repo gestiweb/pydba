@@ -379,6 +379,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             if str(field.pk)=='true':
                 ispkey = True
                 # Si tiene constraint, tiene internamente un indice asociado. 
+
                 this_field_requires_index = True # se habilita por compatibilidad con abanQ
                 #unique_index = " UNIQUE "
                 
@@ -403,6 +404,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
                 
         if hasattr(field,"relation"):
             this_field_requires_index = True
+            if options.loindex: this_field_requires_index = "disabled"
             for relation in field.relation:
                 if not hasattr(relation,"card"):
                     print("WARNING: %s.%s has one relation without "
@@ -415,6 +417,8 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
                 #            "'card' tag" % (table,row['name']))
         if hasattr(field,"freerelation"):
             this_field_requires_index = True
+            if options.loindex: this_field_requires_index = "disabled"
+            
             for relation in field.freerelation:
                 if not hasattr(relation,"card"):
                     print("WARNING: %s.%s has one free-relation without "
@@ -456,9 +460,10 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
                 where_list += ["%s IS NOT NULL" % row['name']]
             if 'only-indexable' in index_options:
                 where_list += ["indexable = TRUE"]
-            if 'disabled' in index_options:
+            if 'disabled' in index_options or this_field_requires_index == "disabled":
                 where_list = ["false"]
                 
+            
             if where_list:
                 options_with += " WHERE %s " % (" AND ".join(where_list))
                 # concurrent = "CONCURRENTLY"
@@ -466,8 +471,12 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
                 options_with1 =  options_with
                 if 'fastwrite' in index_options or 'disabled' in default_idx_options:
                     options_with1 = " WHERE false "
-                indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text) %s) %s;" 
-                        % (table,row['name'],table,row['name'], index_adds, options_with1)]
+                if options.loindex:
+                    indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text) %s) WHERE false;" 
+                            % (table,row['name'],table,row['name'], index_adds)]
+                else:    
+                    indexes+=["CREATE INDEX %s_%sup_m1_idx ON %s (upper(%s::text) %s) %s;" 
+                            % (table,row['name'],table,row['name'], index_adds, options_with1)]
 
             indexes+=["CREATE %s INDEX %s %s_%s_m1_idx ON %s (%s) %s;" 
                     % (unique_index,concurrent,table,row['name'],table,row['name'], options_with)]
