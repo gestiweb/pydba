@@ -83,6 +83,9 @@ def main():
     parser.add_option("--onlyalone", help="Forbid rebuilds if other users are connected"
                         ,dest="rebuildalone", action="store_true")
                         
+    parser.add_option("--index", help="Drop indexes and create them again whenever the MTD file is processed"
+                        ,dest="index", action="store_true")
+                        
     parser.add_option("--reindex", help="Drop indexes and create them again whenever the MTD file is processed"
                         ,dest="reindex", action="store_true")
                         

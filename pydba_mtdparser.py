@@ -990,7 +990,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         
         
     if not Regenerar:
-        reindex = options.reindex
+        reindex = options.index or options.reindex or options.loindex
         qry_indexes = ddb.query("""
             SELECT pc.relname as tabla , pc2.relname as indice,pi.indkey as vector_campos
             FROM pg_class pc 
@@ -1001,7 +1001,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 """ % table)
         dt_indexes=qry_indexes.dictresult() 
         indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = False, issue_create = False)
-        if reindex:
+        if reindex and not options.reindex:
             i_names = []
             i_names2 = [ r['indice'] for r in dt_indexes ] 
 
@@ -1027,7 +1027,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     
                 create_indexes(ddb,add_indexes, table)
             
-        if reindex:
+        if options.reindex:
             print "Reindexing table %s . . . (full reindex)" % table
             for fila in dt_indexes:
                 try:

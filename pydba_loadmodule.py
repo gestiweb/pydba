@@ -228,7 +228,9 @@ def load_module_loadone(options,modpath,db, preparse=False):
                             
                             mparser=pydba_mtdparser.MTDParser()
                             mparser.parse_mtd(mtd)
-                            pydba_mtdparser.Tables[table]=mparser
+                            mtdquery = getattr(mtd, "query", None)
+                            if not mtdquery:
+                                pydba_mtdparser.Tables[table]=mparser
                             
                                 
 
