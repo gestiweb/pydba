@@ -616,6 +616,8 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
         for drop in drops:
             try:
                 db.query(drop)
+            except KeyboardInterrupt:
+                raise
             except:
                 pass
                 #print "ERROR:", drop , " .. execution failed:"
@@ -634,12 +636,16 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
     if issue_create:
         try:
             db.query(txtcreate)
+        except KeyboardInterrupt:
+            raise
         except Exception, e:
             print e, txtcreate
             raise     
         sql = "ALTER INDEX %s SET (fillfactor = %d);" % (pkeyname, pkey_fillfactor)
         try:
             db.query(sql)
+        except KeyboardInterrupt:
+            raise
         except Exception, e:
             print e
             print txtcreate
@@ -671,11 +677,15 @@ def create_indexes(db,indexes,table):
                 db.query("DROP INDEX %s;" % fila['indice'])
             try:
                 db.query(index)
+            except KeyboardInterrupt:
+                raise
             except:
                 print "Error al crear el índice!", index
                 status = False
                 traceback.print_exc(file=sys.stdout)
                 
+        except KeyboardInterrupt:
+            raise
         except:
             status = False
             print index
@@ -762,6 +772,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         try:
             idx = create_table(options,ddb,table,mtd, addchecks = options.addchecks)
             create_indexes(ddb,idx,table)
+        except KeyboardInterrupt:
+            raise
         except:
             print "Error no esperado!"
             print traceback.format_exc()
@@ -774,6 +786,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 if (options.verbose): print sql
                 ddb.query(sql);
                 if (options.verbose): print "done."
+            except KeyboardInterrupt:
+                raise
             except:
                 print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
                 ddb.query("ROLLBACK;");
@@ -906,7 +920,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 #print "ERROR: La base de datos de origien no tiene la columna '%s' en la tabla '%s'" % (name,table)
                 try:
                     mparser.basic_fields.remove(name)
-                except:
+                except KeyboardInterrupt:
+                    raise
+                except Exception:
                     pass
     else:
         #print "ERROR: La BD origien no tiene la tabla '%s'" % (table)
@@ -944,7 +960,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             sys.stdout.flush()
             try:
               ddb.query("DELETE FROM %s" % (table))
-            except:
+            except KeyboardInterrupt:
+                raise
+            except Exception:
               print "No se pudo vaciar la tabla."
               return
             #print "done"
@@ -980,7 +998,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 ddb.query(sql);
                 if (options.verbose): print "done."
                 ddb.query("RELEASE SAVEPOINT lock_%s;" % ltable);
-        except:
+        except KeyboardInterrupt:
+            raise
+        except Exception:
             print "Error al bloquear la tabla %s , ¡algun otro usuario está conectado!" % ltable
             if options.transactions:
                 ddb.query("ROLLBACK TO SAVEPOINT lock_%s;" % ltable);
@@ -1032,6 +1052,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             for fila in dt_indexes:
                 try:
                     ddb.query("DROP INDEX %s;" % fila['indice'])
+                except KeyboardInterrupt:
+                    raise
                 except Exception:
                     pass
         
@@ -1047,11 +1069,13 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     if Regenerar and existent_rows < 1 :  # **** REGENERACION TABLA VACIA *** 
         try:
             ddb.query("DROP TABLE %s CASCADE;" % (table))
-        except:
+        except KeyboardInterrupt:
+            raise
+        except Exception:
             print "No se pudo borrar la tabla antigua." , table
         try:
             indexes = create_table(options,ddb,table,mtd,oldtable=table,addchecks = options.addchecks)
-        except:
+        except Exception:
             print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
             why = traceback.format_exc()
             print "**** Motivo:" , why
@@ -1076,6 +1100,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 for fila in dt_indexes:
                     try:
                         ddb.query("DROP INDEX %s;" % fila['indice'])
+                    except KeyboardInterrupt:
+                        raise
                     except Exception:
                         pass
         
@@ -1086,6 +1112,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             fail = False
             try:
               ddb.query("ALTER TABLE %s RENAME TO %s" % (table,newnametable))
+            except KeyboardInterrupt:
+              raise
             except:
               print "No se pudo renombrar la tabla."
               return
@@ -1099,11 +1127,15 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                         # ALTER SEQUENCE - RENAME TO - solo esta disponible  a partir de psql 8.3
                         # ALTER TABLE - RENAME TO - es compatible y funciona desde 8.0 o antes
                         qry_serial=ddb.query("ALTER TABLE %s RENAME TO %s" % (desired_serial, desired_serial+str(random.randint(100,100000))))
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         pass
             try:
               indexes = create_table(options,ddb,table,mtd,oldtable=newnametable,addchecks = options.addchecks)
-            except:
+            except KeyboardInterrupt:
+                raise
+            except Exception:
               fail = True
               print "ERROR: Se encontraron errores graves al crear la tabla %s" % table
               why = traceback.format_exc()
@@ -1151,7 +1183,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     ddb.query(sql)
                     if options.transactions:
                         ddb.query("RELEASE SAVEPOINT lock_sql;");
-                except:
+                except KeyboardInterrupt:
+                    raise
+                except Exception:
                     fail1 = True
                     print sql
                     print "Error al intentar regenerar por SQL la tabla %s:" % table
@@ -1167,7 +1201,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                         dict_otable_count = qry_otable_count.dictresult()
                         new_rows = int(dict_otable_count[0]["n"])
                         rows2 = new_rows
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         print "Error al calcular el tamaño de las tablas."
                         print traceback.format_exc()
                         fail1 = True
@@ -1186,14 +1222,18 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
                     try:
                         data=export_table(options,ddb,newnametable,"*",old_pkey,new_pkey)
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         fail = True
         
                     if old_rows>200 or options.debug:
                         print "Regenerando tabla %s (%d filas)  ... " % (table, old_rows)
                     try:
                         log = auto_import_table(options,ddb,table,data,mparser.field, pkey = primarykey)
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         fail = True
                         print traceback.format_exc()
             
@@ -1221,7 +1261,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 
                                 sql="INSERT INTO %s (%s) VALUES(%s);" % (table, ", ".join(fields), ", ".join(values))
                                 print >> filelog , sql
-                            except:
+                            except KeyboardInterrupt:
+                                raise
+                            except Exception:
                                 why = traceback.format_exc()
                                 print "**** Error al generar el sql de backup:" , why
                     
@@ -1238,7 +1280,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                         dict_otable_count = qry_otable_count.dictresult()
                         new_rows = int(dict_otable_count[0]["n"])
                         rows2 = new_rows
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         print "Error al calcular el tamaño de las tablas."
                         print traceback.format_exc()
                         fail = True
@@ -1246,7 +1290,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     if rows1 != rows2:
                         print "ERROR: Las filas en la nueva tabla (%d) no coinciden con la original (%d). Se deshace el cambio." % (rows2,rows1)
                         fail = True
-        except:
+        except KeyboardInterrupt:
+            raise
+        except Exception:
             print "Error INESPERADO regenerando tabla: %s" % table
             print traceback.format_exc()
             fail = True
@@ -1255,13 +1301,17 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         if fail:
             try:
               ddb.query("ALTER TABLE %s RENAME TO %s_new;" % (table,newnametable))
-            except:
+            except KeyboardInterrupt:
+                raise
+            except Exception:
               print "No se pudo renombrar la tabla nueva."
               pass  
 
             try:
               ddb.query("ALTER TABLE %s RENAME TO %s;" % (newnametable,table))
-            except:
+            except KeyboardInterrupt:
+                raise
+            except Exception:
               print "No se pudo renombrar la tabla."
               pass  
             
@@ -1274,13 +1324,17 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
               
             try:
               ddb.query("DROP TABLE %s CASCADE;" % (newnametable))
-            except:
+            except KeyboardInterrupt:
+                raise
+            except Exception:
               print "No se pudo borrar la tabla de backup."
               fail = True
             if not options.transactions:
                 try:
                   ddb.query("VACUUM ANALYZE %s;" % (table))
-                except:
+                except KeyboardInterrupt:
+                    raise
+                except Exception:
                   print "No se pudo analizar la nueva tabla."
                   fail = True
 
@@ -1430,7 +1484,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 ddb.endcopy()
             except IOError: 
                 pass
-        except:
+        except KeyboardInterrupt:
+            raise
+        except Exception:
             print "Un error ocurrió durante la copia (%d/%d lineas fueron copiadas):" % (n,num)
             print traceback.format_exc()
             f1.write("\\.\n");
@@ -1501,18 +1557,24 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     #val=val.decode("cp1252")
                     #val=val.encode("utf8")
                     pass
-                except:
+                except KeyboardInterrupt:
+                    raise
+                except Exception:
                     val=None
                 if mparser.field[fieldname].dtype == 'double precision':
                     try:
                         val = float(re.sub(r"[^0-9\.]",'',val))
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         val = 0
                 elif mparser.field[fieldname].dtype == 'date':
                     try:
                         dt = datetime.strptime(val, "%d/%m/%Y %H:%M:%S")
                         val = dt.isoformat()
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         val = None
                 
                 if val == "": val = None
@@ -1575,7 +1637,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         mparser.basic_fields.sort()
         try:
             origin_data=export_table(options,odb,table,mparser.basic_fields)
-        except:
+        except KeyboardInterrupt:
+            raise
+        except Exception:
             print mparser.basic_fields
             raise
         origin_rows={}
@@ -1629,10 +1693,14 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     sql="INSERT INTO %s (%s) VALUES(%s)" % (table, ", ".join(fields), ", ".join(values))
                     try:
                         ddb.query(sql)
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         print "Error al ejecutar la SQL: " + sql
                         raise
-                except:
+                except KeyboardInterrupt:
+                    raise
+                except Exception:
                     print "Cannot insert: ", repr(row)
                     raise
             
@@ -1642,9 +1710,11 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     sql="DELETE FROM %s  WHERE %s = %s" % (table, pkey, sql_formatstring(pk,mparser.field[pkey]))
                     try:
                         ddb.query(sql)
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         print "Error al ejecutar la SQL: " + sql
-                except:
+                except Exception:
                     print "Cannot delete: ",repr(row)
                     raise
             
@@ -1661,7 +1731,9 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                     sql="UPDATE %s SET %s WHERE %s = %s" % (table, ", ".join(values), pkey, sql_formatstring(pk,mparser.field[pkey]))
                     try:
                         ddb.query(sql)
-                    except:
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception:
                         print "Error al ejecutar la SQL: " + sql
                 except:
                     print "Cannot update: ",repr(row)
