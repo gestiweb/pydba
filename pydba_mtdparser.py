@@ -860,9 +860,18 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                 #return False
                 old_fields.append(old_pkey)
             else:
-                if options.verbose:
+                if options.verbose or options.safe:
                     print "Regenerar: La columna '%s' no existe (aun) en la tabla '%s'" % (name,table)
-                Regenerar=True
+                if options.safe:
+                    query = "ALTER TABLE %s ADD COLUMN %s %s DEFAULT %s NULL; " % (table, name, mfield.dtype, default_value)
+                    print query
+                    try:
+                        qry = ddb.query(query);
+                    except Exception, e:
+                        print "Error al intentar agregar columna en modo safe:", e
+                        Regenerar=True
+                else:
+                    Regenerar = True
                     
                 old_fields.append(default_value)
                 
@@ -884,6 +893,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             length=origin_fielddata[name]["character_maximum_length"]
             
             if length == None: length = 0
+            if length == 0: length = 250
             if mfielddtype == "serial": mfielddtype = "integer"
             if mfielddtype == "bool": mfielddtype = "boolean"
             if dtype == "serial": dtype = "integer"
@@ -892,17 +902,26 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             #print null, dtype, length
 
             if null != mfield.null and null == False: 
-                if options.verbose:
+                if options.verbose or options.safe:
                     print "Regenerar: La columna '%s' en la tabla '%s' ha establecido null de %s a %s" % (name,table,null,mfield.null)
-                Regenerar=True
+                if options.safe:
+                    query = "ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL; " % (table, name)
+                    print query
+                    try:
+                        qry = ddb.query(query);
+                    except Exception, e:
+                        print "Error al intentar modificar columna en modo safe:", e
+                        Regenerar=True
+                else:
+                    Regenerar = True
 
             if dtype != mfielddtype: 
-                if options.verbose:
+                if options.verbose or options.safe:
                     print "Regenerar: La columna '%s' en la tabla '%s' ha cambiado el tipo de datos de %s a %s" % (name,table,dtype,mfielddtype)
                 Regenerar=True
 
             if length < mfield.length: 
-                if options.verbose:
+                if options.verbose or options.safe:
                     print "Regenerar: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
                 Regenerar=True
 
@@ -1790,7 +1809,8 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
                         if options.verbose:
                             print "INFO: Actualizando %s de %d a %d (+%d)" % (serial, prev_max, max_serial, increment)
                             
-                        ddb.query("ALTER SEQUENCE %s INCREMENT BY %d RESTART WITH %d;" % (serial, increment, max_serial))
+                        if not options.safe:
+                            ddb.query("ALTER SEQUENCE %s INCREMENT BY %d RESTART WITH %d;" % (serial, increment, max_serial))
     except:
         print "Fieldname, table:",tfield.name,table
         print "PKeys: %s" % mparser.primary_key
