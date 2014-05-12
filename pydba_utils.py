@@ -179,7 +179,8 @@ def dbconnect(options):
                         passwd=options.dpasswd )  
             cn.query("SET client_encoding = 'UTF8';")    
             cn.query("SET client_min_messages = warning;");            
-            cn.query("SET session_replication_role = replica;");
+            try: cn.query("SET session_replication_role = replica;");
+            except Exception, e: print e
     except:
         print("Error trying to connect to database '%s' in host %s:%s" 
                 " using user '%s'" % (
