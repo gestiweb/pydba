@@ -1765,7 +1765,10 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         for pkey in mparser.primary_key:
             tfield=mparser.field[pkey]
             if tfield.dtype=='serial':
-                qry_serial=ddb.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
+                try:
+                    qry_serial=ddb.query("SELECT pg_get_serial_sequence('%s', '%s') as serial" % (table, tfield.name))
+                except pg.ProgrammingError:
+                    continue
                 dr_serial=qry_serial.dictresult()
                 for dserial in dr_serial:
                     serial=dserial['serial']
