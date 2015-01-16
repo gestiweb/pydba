@@ -811,7 +811,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
     aux_columns3=qry_columns3.dictresult()
     for column in aux_columns3:
         old_pkey = column["column_name"]
-        
+    
 
     Regenerar=options.rebuildtables
     old_fields = []
@@ -931,6 +931,24 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
           
           
           #print origin_fielddata[name]
+    #if options.addpkeys: print "AddPkeys: table %r : old_pkey %r , new_pkey %r " % (table, old_pkey,new_pkey)
+    if options.addpkeys and old_pkey is None and new_pkey is not None:
+        print "AddPkeys: Se va a insertar la nueva primary key '%s' en la tabla '%s' como se ha solicitado." % (new_pkey, table)
+        query = "ALTER TABLE %s ADD PRIMARY KEY (%s); " % (table, new_pkey)
+        print query
+        try:
+            qry = ddb.query(query);
+        except Exception, e:
+            print "Error al intentar agregar primary key:", e
+            return
+        options.addpkeys = False
+        try:
+            x = load_mtd(options,odb,ddb,table,mtd_parse)
+        except Exception, e:
+            print "Error al intentar recargar la tabla después de agregar el primary key.", e
+            x = None
+        options.addpkeys = True
+        return x
         
     if len(origin_tablefields)>0:
         for field in reversed(mparser.basic_fields):

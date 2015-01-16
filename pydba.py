@@ -82,6 +82,9 @@ def main():
                         )
     parser.add_option("--onlyalone", help="Forbid rebuilds if other users are connected"
                         ,dest="rebuildalone", action="store_true")
+
+    parser.add_option("--add-pkeys", help="Try to add new primary keys if they're not on the dest database"
+                        ,dest="addpkeys", action="store_true")
                         
     parser.add_option("--index", help="Drop indexes and create them again whenever the MTD file is processed"
                         ,dest="index", action="store_true")
