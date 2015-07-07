@@ -312,6 +312,9 @@ def process_drop(options, db):
             if debug:
                 print e.args[0].strip()
                 if len(e.args) > 1 and e.args[1]:print e.args[1]
+        except ValueError, e:
+            print "ERROR: Error borrando objeto '%s':" % name, filename(name)
+            print e
         
         
         
