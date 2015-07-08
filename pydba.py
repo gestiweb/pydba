@@ -495,7 +495,10 @@ def main():
                         buf = zlib.decompress(b64decode(line[:-1]))
                         mfields = buf.split("\t")
                         buffers.append(mfields)
-                    addbuffer(line, buffers)
+                    try:
+                        addbuffer(line, buffers)
+                    except Exception, e:
+                        print e
                     gc.collect()
                     
                 def copytodb(buffers, db, nlineas):
