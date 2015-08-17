@@ -1403,131 +1403,141 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         print "Copiando a disco %s . . . " % table
         qry = ddb.query(sql)
         """
-        f1 = open(filename, "a")
-        f1.write("\n");
-        f1.write("--TABLE--\n")
-        f1.write("-- rows: %04X\n" % num)
-        f1.write("-- table: %s\n" % table)
-        f1.write("-- fields: %s\n" % ",".join(mparser.basic_fields))
-        f1.write("-- primarykey: %s\n" % primarykey)
-        #f1.write("--*TRUNCATE %s;\n" % (table))
-        #f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
-        f1.write("--BEGIN-COPY--\n")
-        sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
-        qry = ddb.query(sql)
+        try:
+            sql = "COPY (SELECT %s FROM %s ORDER BY %s) TO STDOUT" % (fields, table, primarykey)
+            qry = ddb.query(sql)
+            firstline = ddb.getline()
             
-        buffers = []
-        softlimit = 16033  # TIENE QUE SER PRIMO!! 
-        #primelist = [127  , 353 , 607,877,1153] # ef. 6.13x , 3.9Mb @ 1024
-        #primelist = [127  , 353 , 607,877,1153,2689, 4001, 6763] # 7.14x, 3.3Mb @ 1024
-        # fichero de 2 meses: 4.7Mb 5.39x
-        # fichero de 2 meses: 4.8Mb 5.21x
         
-        primelist = [127 ,353 ,607,877, 947,1153,1619,2689,3467, 4001,6551, 6763, 7307]  # 7.20  ,3.4Mb @ 1024 (3.3 @ 512)
-        # fichero de 2 meses: 4.6Mb 5.40x
-        # fichero de 2 meses: 4.5Mb 5.04x
-        # escoger uno de:    127  , 353 , 607 ,   877 , 1153 , 1453 ,  2689   , 4001   , 6763   
+            f1 = open(filename, "a")
+            f1.write("\n");
+            f1.write("--TABLE--\n")
+            f1.write("-- rows: %04X\n" % num)
+            f1.write("-- table: %s\n" % table)
+            f1.write("-- fields: %s\n" % ",".join(mparser.basic_fields))
+            f1.write("-- primarykey: %s\n" % primarykey)
+            #f1.write("--*TRUNCATE %s;\n" % (table))
+            #f1.write("--*COPY %s (%s) FROM STDIN;\n" % (table, fields))
+            f1.write("--BEGIN-COPY--\n")
+            
+            buffers = []
+            softlimit = 16033  # TIENE QUE SER PRIMO!! 
+            #primelist = [127  , 353 , 607,877,1153] # ef. 6.13x , 3.9Mb @ 1024
+            #primelist = [127  , 353 , 607,877,1153,2689, 4001, 6763] # 7.14x, 3.3Mb @ 1024
+            # fichero de 2 meses: 4.7Mb 5.39x
+            # fichero de 2 meses: 4.8Mb 5.21x
+        
+            primelist = [127 ,353 ,607,877, 947,1153,1619,2689,3467, 4001,6551, 6763, 7307]  # 7.20  ,3.4Mb @ 1024 (3.3 @ 512)
+            # fichero de 2 meses: 4.6Mb 5.40x
+            # fichero de 2 meses: 4.5Mb 5.04x
+            # escoger uno de:    127  , 353 , 607 ,   877 , 1153 , 1453 ,  2689   , 4001   , 6763   
         
         
-        primelist = [53,79, 127, 227 ,353, 457,587,607,751,877, 947,1153,1237,1483,1619,2689,3467, 4001,5813,6551, 6763, 7307,7919]  
+            primelist = [53,79, 127, 227 ,353, 457,587,607,751,877, 947,1153,1237,1483,1619,2689,3467, 4001,5813,6551, 6763, 7307,7919]  
 
-        blocksize = 512
-        # 10531, 16033 376931
-        conflimit = num+1 # (2 * softlimit) / (len(primelist) )
-        pages = math.ceil(float(num) / conflimit)
-        if pages < 1: pages = 1
-        limit = math.floor(float(num) / pages)
-        if limit < 1: limit = 1
-        bufsize = 0
-        blocks = 0
-        try:        
-            n = 0
-            while True:
-                line = ddb.getline()
+            blocksize = 512
+            # 10531, 16033 376931
+            conflimit = num+1 # (2 * softlimit) / (len(primelist) )
+            pages = math.ceil(float(num) / conflimit)
+            if pages < 1: pages = 1
+            limit = math.floor(float(num) / pages)
+            if limit < 1: limit = 1
+            bufsize = 0
+            blocks = 0
+            try:        
+                n = 0
+                while True:
+                    if firstline is None:
+                        line = ddb.getline()
+                    else:
+                        line = firstline
+                        firstline = None
                 
-                splitted = line.split("\t")
-                line_hash = zlib.adler32(splitted[0]) & 0xffffffff
-                if len(buffers) == 0:
-                    for f in splitted:
-                        buffers.append([])
-                n += 1
-                if line != "\\.": 
-                    bufsize +=1
-                    for field,buffer1 in zip(splitted,buffers):
-                        buffer1.append(field)
+                    splitted = line.split("\t")
+                    line_hash = zlib.adler32(splitted[0]) & 0xffffffff
+                    if len(buffers) == 0:
+                        for f in splitted:
+                            buffers.append([])
+                    n += 1
+                    if line != "\\.": 
+                        bufsize +=1
+                        for field,buffer1 in zip(splitted,buffers):
+                            buffer1.append(field)
                         
                     
-                if ((line_hash % softlimit in primelist and bufsize >= softlimit / (len(primelist) * 2) ) or bufsize >= limit or line == "\\.") and bufsize > 0:
-                    f1.write("-- bindata >>\n")
-                    #f1.write("-- rows: %d %d-%d\n" % (bufsize,n-bufsize+1,n))
-                    #f1.write("-- lenghts: ")
-                    bufs = []
-                    totallen = 0
-                    if len(buffers) != len(mparser.basic_fields):
-                        print "ERROR: Las longitudes de los arrays no coinciden!!"
-                        print "buffers %d, fields %d" % (len(buffers), len(mparser.basic_fields))
+                    if ((line_hash % softlimit in primelist and bufsize >= softlimit / (len(primelist) * 2) ) or bufsize >= limit or line == "\\.") and bufsize > 0:
+                        f1.write("-- bindata >>\n")
+                        #f1.write("-- rows: %d %d-%d\n" % (bufsize,n-bufsize+1,n))
+                        #f1.write("-- lenghts: ")
+                        bufs = []
+                        totallen = 0
+                        if len(buffers) != len(mparser.basic_fields):
+                            print "ERROR: Las longitudes de los arrays no coinciden!!"
+                            print "buffers %d, fields %d" % (len(buffers), len(mparser.basic_fields))
                         
-                    for buffer1,fname in zip(buffers,mparser.basic_fields):
-                        #buf = "\t".join(buffer1) 
-                        buf = zlib.compress("\t".join(buffer1),9)
-                        #f1.write("%X " % len(buf))
-                        totallen += len(buf)
-                        bufs.append(buf)
-                    #f1.write("\n")
+                        for buffer1,fname in zip(buffers,mparser.basic_fields):
+                            #buf = "\t".join(buffer1) 
+                            buf = zlib.compress("\t".join(buffer1),9)
+                            #f1.write("%X " % len(buf))
+                            totallen += len(buf)
+                            bufs.append(buf)
+                        #f1.write("\n")
                     
-                    nsz = blocksize
-                    f1.flush()
-                    pos = f1.tell() 
-                    over = pos % nsz
-                    if nsz-over < totallen/5.0 or nsz-over < (pos - last_sync_pos) / (blocks+1):
-                        if pos - last_sync_pos > nsz-over * 100: 
-                            if nsz-over > 3:
-                                f1.write("-- " + "." * (nsz-over-4)+"\n")
-                            else:
-                                f1.write("\n" * (nsz-over))
-                            f1.flush()
-                            last_sync_pos = f1.tell() 
-                    
-                    blocks += 1
-                    for buf,fname in zip(bufs,mparser.basic_fields):
                         nsz = blocksize
                         f1.flush()
                         pos = f1.tell() 
                         over = pos % nsz
-                        if nsz-over < len(buf)/30.0 :
-                            if pos - last_sync_pos > nsz-over * 100:
+                        if nsz-over < totallen/5.0 or nsz-over < (pos - last_sync_pos) / (blocks+1):
+                            if pos - last_sync_pos > nsz-over * 100: 
                                 if nsz-over > 3:
                                     f1.write("-- " + "." * (nsz-over-4)+"\n")
                                 else:
                                     f1.write("\n" * (nsz-over))
                                 f1.flush()
                                 last_sync_pos = f1.tell() 
+                    
+                        blocks += 1
+                        for buf,fname in zip(bufs,mparser.basic_fields):
+                            nsz = blocksize
+                            f1.flush()
+                            pos = f1.tell() 
+                            over = pos % nsz
+                            if nsz-over < len(buf)/30.0 :
+                                if pos - last_sync_pos > nsz-over * 100:
+                                    if nsz-over > 3:
+                                        f1.write("-- " + "." * (nsz-over-4)+"\n")
+                                    else:
+                                        f1.write("\n" * (nsz-over))
+                                    f1.flush()
+                                    last_sync_pos = f1.tell() 
                             
-                        #f1.write("%d:%s;" % (len(buf),fname))
-                        #f1.write("%s;" % (fname))
-                        f1.write(b64encode(buf))
-                        f1.write("\n")
+                            #f1.write("%d:%s;" % (len(buf),fname))
+                            #f1.write("%s;" % (fname))
+                            f1.write(b64encode(buf))
+                            f1.write("\n")
                         
-                    buffers = []
-                    bufsize = 0
-                    for f in mparser.basic_fields:
-                        buffers.append([])
+                        buffers = []
+                        bufsize = 0
+                        for f in mparser.basic_fields:
+                            buffers.append([])
                         
                     
-                #f1.write(line+"\n");
+                    #f1.write(line+"\n");
                 
-                if line == "\\.": break
-            try:
-                ddb.endcopy()
-            except IOError: 
-                pass
-        except KeyboardInterrupt:
-            raise
-        except Exception:
-            print "Un error ocurrió durante la copia (%d/%d lineas fueron copiadas):" % (n,num)
-            print traceback.format_exc()
-            f1.write("\\.\n");
-        f1.write("\n");
+                    if line == "\\.": break
+                try:
+                    ddb.endcopy()
+                except IOError: 
+                    pass
+            except KeyboardInterrupt:
+                raise
+            except Exception:
+                print "Un error ocurrió durante la copia (%d/%d lineas fueron copiadas):" % (n,num)
+                print traceback.format_exc()
+                f1.write("\\.\n");
+            f1.write("\n");
+        except Exception, e:
+            print "Error al volcar tabla:",table, primarykey
         
         
         
