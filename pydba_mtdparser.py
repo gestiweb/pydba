@@ -923,7 +923,16 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             if length < mfield.length: 
                 if options.verbose or options.safe:
                     print "Regenerar: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
-                Regenerar=True
+                if mfield.dtype == "character varying" and options.safe and length < 230:
+                    query = "ALTER TABLE %s ALTER COLUMN %s TYPE varchar; " % (table, name)
+                    print query
+                    try:
+                        qry = ddb.query(query);
+                    except Exception, e:
+                        print "Error al intentar modificar columna en modo safe:", e
+                        Regenerar=True
+                else:
+                    Regenerar=True
 
             if length > mfield.length: 
                 mfield.length = length
