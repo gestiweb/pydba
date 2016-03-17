@@ -1388,7 +1388,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         # Generar comandos copy si se especifico
         global last_sync_pos
         primarykey = mparser.primary_key[0]
-        fields = ', '.join(mparser.basic_fields)
+        fields = '"' + '", "'.join(mparser.basic_fields) + '"'
         filename = "%s-%s.pydbabackup" % (options.ddb,exec_hash)
         qry = ddb.query("SELECT COUNT(*) as count FROM %s" % (table))
         num = 0
