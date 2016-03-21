@@ -640,6 +640,34 @@ ALTER TABLE ONLY flvar
     ADD CONSTRAINT flvar_pkey PRIMARY KEY (id);
 
 
+DROP TABLE IF EXISTS public.fllarge CASCADE;
+
+CREATE TABLE public.fllarge
+(
+  refkey character varying(100) NOT NULL,
+  sha1 character varying(50),
+  contenido text,
+  CONSTRAINT fllarge_pkey PRIMARY KEY (refkey)
+  WITH (FILLFACTOR=80)
+)
+WITH (
+  FILLFACTOR=90,
+  OIDS=FALSE
+);
+ALTER TABLE public.fllarge
+  OWNER TO gestiweb;
+
+CREATE INDEX fllarge_refkey_m1_idx
+  ON public.fllarge
+  USING btree
+  (refkey COLLATE pg_catalog."default");
+
+CREATE INDEX fllarge_refkeyup_m1_idx
+  ON public.fllarge
+  USING btree
+  (upper(refkey::text) COLLATE pg_catalog."default");
+
+
 --
 -- TOC entry 1790 (class 0 OID 0)
 -- Dependencies: 6
@@ -657,4 +685,3 @@ GRANT ALL ON SCHEMA public TO PUBLIC;
 --
 -- PostgreSQL database dump complete
 --
-
