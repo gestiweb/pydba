@@ -45,7 +45,7 @@ def load_module(options,db=None, preparse=False):
     modules=[]
     dirs2={}
     mod_filenames = []
-    for root, dirs, files in os.walk(options.loaddir):
+    for root, dirs, files in os.walk(options.loaddir,followlinks=True):
         FoundModule=False
         dirs2[root]=root
         for name in files:
