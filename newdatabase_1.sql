@@ -668,6 +668,59 @@ CREATE INDEX fllarge_refkeyup_m1_idx
   (upper(refkey::text) COLLATE pg_catalog."default");
 
 
+DROP TABLE IF EXISTS public.flusers CASCADE;
+  
+CREATE TABLE public.flusers
+(
+  iduser character varying(30) NOT NULL,
+  idgroup character varying(30) NOT NULL,
+  descripcion character varying(100),
+  CONSTRAINT flusers_pkey PRIMARY KEY (iduser)
+  WITH (FILLFACTOR=80)
+)
+WITH (
+  FILLFACTOR=90, 
+  OIDS=FALSE
+);
+ALTER TABLE public.flusers
+  OWNER TO gestiweb;
+
+-- Index: public.flusers_idgroup_m1_idx
+
+-- DROP INDEX public.flusers_idgroup_m1_idx;
+
+CREATE INDEX flusers_idgroup_m1_idx
+  ON public.flusers
+  USING btree
+  (idgroup COLLATE pg_catalog."default");
+
+-- Index: public.flusers_idgroupup_m1_idx
+
+-- DROP INDEX public.flusers_idgroupup_m1_idx;
+
+CREATE INDEX flusers_idgroupup_m1_idx
+  ON public.flusers
+  USING btree
+  (upper(idgroup::text) COLLATE pg_catalog."default");
+
+-- Index: public.flusers_iduser_m1_idx
+
+-- DROP INDEX public.flusers_iduser_m1_idx;
+
+CREATE INDEX flusers_iduser_m1_idx
+  ON public.flusers
+  USING btree
+  (iduser COLLATE pg_catalog."default");
+
+-- Index: public.flusers_iduserup_m1_idx
+
+-- DROP INDEX public.flusers_iduserup_m1_idx;
+
+CREATE INDEX flusers_iduserup_m1_idx
+  ON public.flusers
+  USING btree
+  (upper(iduser::text) COLLATE pg_catalog."default");
+  
 --
 -- TOC entry 1790 (class 0 OID 0)
 -- Dependencies: 6

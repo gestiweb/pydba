@@ -799,8 +799,11 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
         print "- tabla %s existe." % table
 
     # La tabla existe, hay que ver cómo la modificamos . . . 
-
-    qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
+    try:
+        qry_otable_count = odb.query("SELECT COUNT(*) as n from %s" % table)
+    except Exception, e:
+        print "CRITICAL: Error en tabla %r: %s" % (table, e)
+        raise
     dict_otable_count = qry_otable_count.dictresult()
     old_rows = int(dict_otable_count[0]["n"])
     old_pkey = None
