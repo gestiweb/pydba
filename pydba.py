@@ -10,6 +10,12 @@ import subprocess
 import optparse
 import os, sys 		# variables entorno
 
+# eliminar buffering.
+try: sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+except Exception: pass
+try: sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
+except Exception: pass
+
 start_errors = 0
 try:
     import pg             # depends - python-pygresql
