@@ -2236,8 +2236,14 @@ def procesarRelacionesTabla(tables, crelation):
         crelation['default'] = str(Tables[crelation['ntable']].field[crelation['nfield']].default)
     except:
         crelation['default'] = None
-    
-    
+
+    #if not Tables[crelation['ntable']].field[crelation['nfield']].null and crelation['default'] is None:
+    if Tables[crelation['ntable']].field[crelation['nfield']].null == False and (not crelation['default'] or crelation['default'] == "None"):
+        if Tables[crelation['ntable']].field[crelation['nfield']].dtype in ('integer','serial','double precision','numeric'):
+            crelation['default'] = '0'
+        else:
+            crelation['default'] = ''
+
     parent_rel = {
         "local_field" : crelation['nfield'],
         "remote_field" : crelation['field'],
@@ -2265,11 +2271,25 @@ def procesarTabla(tablename, table):
     global Tables
     primarykey = table.primary_key[0]
     fields = Tables[tablename].field.keys()
+
+    fields_properties = {}
+    for fname in fields:
+        f = Tables[tablename].field[fname]
+        nf = {}
+        nf["name"] = f.name
+        nf["type"] = f.dtype
+        nf["length"] = f.length
+        nf["pk"] = f.pk
+        nf["null"] = f.null
+        nf["default"] = str(f.default)
+        fields_properties[f.name] = nf
+
     tabla = { 
 #        "name" : tablename,
         "primarykey" : primarykey,
 
         "fields" : fields,
+        "fields_properties" : fields_properties,
         "parents" : [],
         "childs" : [],
     }
