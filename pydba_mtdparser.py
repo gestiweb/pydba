@@ -2238,11 +2238,14 @@ def procesarRelacionesTabla(tables, crelation):
         crelation['default'] = None
 
     #if not Tables[crelation['ntable']].field[crelation['nfield']].null and crelation['default'] is None:
-    if Tables[crelation['ntable']].field[crelation['nfield']].null == False and (not crelation['default'] or crelation['default'] == "None"):
-        if Tables[crelation['ntable']].field[crelation['nfield']].dtype in ('integer','serial','double precision','numeric'):
-            crelation['default'] = '0'
-        else:
-            crelation['default'] = ''
+    try:
+        if Tables[crelation['ntable']].field[crelation['nfield']].null == False and (not crelation['default'] or crelation['default'] == "None"):
+            if Tables[crelation['ntable']].field[crelation['nfield']].dtype in ('integer','serial','double precision','numeric'):
+                crelation['default'] = '0'
+            else:
+                crelation['default'] = ''
+    except KeyError:
+        print "WARN: KeyError table %s , field %s" % (crelation['ntable'],crelation['nfield'])
 
     parent_rel = {
         "local_field" : crelation['nfield'],
