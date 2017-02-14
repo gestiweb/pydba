@@ -1800,7 +1800,21 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             
             
             print  table, len(origin_rows),len(dest_rows),len(update_rows)
-          
+
+    qry_logical = ddb.query("SELECT proname FROM pg_proc WHERE proname = 'pg_create_logical_replication_slot'")
+    for row in qry_logical.dictresult():
+        # Servidor PostgreSQL reconoce logical replication:
+        try:
+            qry_serial=ddb.query("ALTER TABLE %s REPLICA IDENTITY full" % (table))
+        except pg.ProgrammingError:
+            continue
+        #SELECT * FROM pg_create_logical_replication_slot('backup_slot', 'test_decoding');
+        #SELECT * FROM pg_logical_slot_get_changes('backup_slot', NULL, NULL, 'include-timestamp', 'on');
+        #SELECT * FROM pg_logical_slot_peek_changes('backup_slot', NULL, NULL, 'include-timestamp', 'on');
+        #SELECT * FROM pg_replication_slots WHERE "database" = current_database() and slot_name = 'backup_slot'
+        # psql $dbname$ -c "COPY (SELECT now(),location,xid,data FROM pg_logical_slot_get_changes('regression_slot', NULL, NULL, 'include-timestamp', 'on')) TO STDOUT;" >> log_$(date).txt
+
+
     try:
         for pkey in mparser.primary_key:
             tfield=mparser.field[pkey]
