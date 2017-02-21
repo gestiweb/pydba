@@ -48,7 +48,7 @@ def create_sql(options):
         try:
             db.query(sql)
         except ValueError, x:
-            if str(x) != 'empty query.': raise
+            if str(x).lower().strip().strip(".") != 'empty query': raise
         except:
             print traceback.format_exc(0)
             errores +=1
