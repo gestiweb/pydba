@@ -267,13 +267,17 @@ class MTDParser:
         self.child_tables=[]        
         self.name = mtd.name
         self.parent = getattr(mtd,"parent",None)
-        for n,field in list(reversed(list(enumerate(mtd.field)))):
+        self.field_list = []
+        for n,field in reversed(list(enumerate(mtd.field[:]))):
             tfield=self.check_field_attrs(field,mtd.name,debug=False)
             if tfield.name in self.field:
                 print "ERROR: En la tabla %s ha aparecido el campo %s más de 1 vez!!" % (self.name,tfield.name)
                 del mtd.field[n]
                 
+        for n,field in enumerate(mtd.field[:]):
+            tfield=self.check_field_attrs(field,mtd.name,debug=False)
             self.field[tfield.name]=tfield
+            self.field_list.append(tfield.name)
             
         
 
@@ -2287,7 +2291,8 @@ def procesarRelacionesTabla(tables, crelation):
 def procesarTabla(tablename, table):
     global Tables
     primarykey = table.primary_key[0]
-    fields = Tables[tablename].field.keys()
+    #fields = Tables[tablename].field.keys()
+    fields = Tables[tablename].field_list
 
     fields_properties = {}
     for fname in fields:
