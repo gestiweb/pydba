@@ -111,7 +111,7 @@ class MTDParser:
         if not hasattr(field,"length"):
             field.length='0'
             if str(field.type_)=='string':
-                field.length='32'
+                field.length='256'
                 if hasattr(field,"optionslist"):
                     options=str(field.optionslist).split(";")
                     maxlen=1
@@ -362,7 +362,7 @@ def create_table(options,db,table,mtd,oldtable=None,addchecks = False, issue_cre
             length=int(str(field.length))
             if length==0:
                 print "ERROR: Se encontró una longitud 0 para una columna string %s.%s" % (table, str(field.name))
-                length=32
+                length=256
             row['type']+="(%d)" % length
         row['options']=""
         
@@ -900,7 +900,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             length=origin_fielddata[name]["character_maximum_length"]
             
             if length == None: length = 0
-            if length == 0: length = 250
+            if length == 0: length = 500
             if mfielddtype == "serial": mfielddtype = "integer"
             if mfielddtype == "bool": mfielddtype = "boolean"
             if dtype == "serial": dtype = "integer"
@@ -930,7 +930,7 @@ def load_mtd(options,odb,ddb,table,mtd_parse):
             if length < mfield.length: 
                 if options.verbose or options.safe:
                     print "Regenerar: La columna '%s' en la tabla '%s' ha cambiado el tamaño de %s a %s" % (name,table,length,mfield.length)
-                if mfield.dtype == "character varying" and options.safe and length < 230:
+                if mfield.dtype == "character varying" and options.safe:
                     query = "ALTER TABLE %s ALTER COLUMN %s TYPE varchar; " % (table, name)
                     print query
                     try:
