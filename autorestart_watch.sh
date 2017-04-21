@@ -2,6 +2,10 @@
 TRIGGERFOLDER="/tmp/pydba_triggers"
 MYPATH=$(dirname "$(readlink -f "$0")")
 logfile=/var/log/pydba_triggers.log
+if test \! -f /usr/bin/inotifywait; then
+    echo "Falta por instalar el paquete inotify-tools"
+
+fi
 exec >> $logfile 2>&1
 
 cat - <<__FILETEXTBODY  > /etc/cron.d/pydba_autorestart_watch
