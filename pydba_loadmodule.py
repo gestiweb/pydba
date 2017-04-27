@@ -133,6 +133,8 @@ def load_module_loadone(options,modpath,db, preparse=False):
     tables=[]
     mtd_files={}
     filetypes=["xml","ui","qry","kut","qs","mtd","ts", "pgsql"]
+    allowed_extensions=["ar","kut","mod","mtd","qry","qs","ts","ui","xml","xpm","py"]
+
     unicode_filetypes=["ui","ts"]
     
     files=[]
@@ -141,6 +143,8 @@ def load_module_loadone(options,modpath,db, preparse=False):
     
     for root, dirs, walk_files in os.walk(modpath):
             for name in walk_files:
+                if f_ext(name) not in allowed_extensions: 
+                    continue
                 fname = os.path.join(root, name)
                 mtime = os.stat(fname)[ST_MTIME]
                 loadFile = True
