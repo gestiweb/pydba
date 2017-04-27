@@ -132,9 +132,9 @@ def load_module_loadone(options,modpath,db, preparse=False):
     module=""
     tables=[]
     mtd_files={}
-    filetypes=["xml","ui","qry","kut","qs","mtd","ts", "pgsql"]
-    allowed_extensions=["ar","kut","mod","mtd","qry","qs","ts","ui","xml","xpm","py"]
-
+    filetypes=["xml","ui","qry","kut","qs","mtd","ts", "pgsql", "py", "qs.py"]
+    allowed_extensions=["ar","kut","mod","mtd","qry","qs","ts","ui","xml","xpm","qs.py","py"]
+    omitted_exts = []
     unicode_filetypes=["ui","ts"]
     
     files=[]
@@ -143,7 +143,11 @@ def load_module_loadone(options,modpath,db, preparse=False):
     
     for root, dirs, walk_files in os.walk(modpath):
             for name in walk_files:
-                if f_ext(name) not in allowed_extensions: 
+                if not name.endswith(".ts") and f_ext(name) not in allowed_extensions: 
+                    if f_ext(name) not in omitted_exts:
+                        omitted_exts.append(f_ext(name))
+                        #print "Extension %r omitida: %r" % (f_ext(name) , name)
+                    
                     continue
                 fname = os.path.join(root, name)
                 mtime = os.stat(fname)[ST_MTIME]
@@ -170,7 +174,7 @@ def load_module_loadone(options,modpath,db, preparse=False):
                 
                 contents=""
                 contents_1=""
-                if f_ext(name) in filetypes:
+                if name.endswith(".ts") or f_ext(name) in filetypes:
                     contents_1=loadfile_inutf8(root,name)
                     contents=my_escape_string(contents_1)
                     if not loadFile:
