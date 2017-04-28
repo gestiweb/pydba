@@ -20,8 +20,7 @@ odb_cn = None
 # Calcular extension de un fichero
 def f_ext(filename):
     name_s=filename.split(".")
-    numsplits=len(name_s)
-    return name_s[numsplits-1]
+    return ".".join(name_s[1:])
 
 def my_escape_string(text):
     text=str(text)
