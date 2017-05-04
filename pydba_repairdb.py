@@ -99,6 +99,7 @@ def dump_db(options,odb=None):
     folder_module = {
         'fl_a3_nomi': 'nominas',
         'flar2kut': 'ar2kut',
+        'flautomata': 'automata',
         'flcolagedo': 'gesdoc',
         'flcolaproc': 'procesos',
         'flcolaproy': 'proyectos',
@@ -111,13 +112,15 @@ def dump_db(options,odb=None):
         'flcrm_ppal': 'principal',
         'fldatosppal': 'datos',
         'fldireinne': 'analisis',
+        'flfact_tpv': 'tpv',
         'flfactalma': 'almacen',
         'flfactinfo': 'informes',
         'flfactppal': 'principal',
         'flfactteso': 'tesoreria',
-        'flfacturac': 'facturacion',
         'flfacttpv': 'tpv',
+        'flfacturac': 'facturacion',
         'flgraficos': 'graficos',
+        'flmantppal': 'mantenimiento',
         'flrrhhppal': 'principal',
         'sys': 'administracion'}
 
@@ -201,8 +204,10 @@ def dump_db(options,odb=None):
                 for fileobj in file_list:
                     file_1 = open(os.path.join(ext_folder,fileobj['nombre']),"w")
                     txt = fileobj['contenido']
-                        
-                    file_1.write( utf8decode(txt) )
+                    try:
+                        file_1.write( utf8decode(txt) )
+                    except Exception as e:
+                        print "Error escribiendo fichero: %r: %r" % (fileobj['nombre'], e)
                     file_1.close()
                     sys.stdout.write(".")
                     sys.stdout.flush()
